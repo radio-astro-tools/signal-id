@@ -16,9 +16,7 @@ typifies the noise for a cube.  The scalar is broadcast to all points
 in the image or the cube using a 2D spatial rescaling and a 1D
 spectral rescaling parameter so that the noise scale is 
 
-	$$N(x,y,z) = \sigma_0 f(x,y) g(z)$$
-
-%	 noise[x,y,z] = scale * spatial_norm[x,y] * spectral_norm[z]
+	 noise[x,y,z] = scale * spatial_norm[x,y] * spectral_norm[z]
 
 * The distribution defaults to a normal distribution with a zero
 center.  Use scipy.stats function handlers to test and sample from the
