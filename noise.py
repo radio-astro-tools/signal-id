@@ -5,7 +5,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as ss
-from cube import *
 import time
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
@@ -22,7 +21,7 @@ class Noise:
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     # This is a global "representative" noise distribution width as a scalar
-    scalar = None   
+    scale = None   
 
     # This is a spatial map of the width parameter
     spatial_norm = None
@@ -36,12 +35,15 @@ class Noise:
     # Noise distribution comaptible with scipy
     distribution = None
     distribution_shape = None
-    
+
+    # Map of arbitrary shapes for the distribution. 
+    distribution_map = None
+
     data = None
     spec_axis = None
 
     # Holds the signal to noise ratio.
-    # SNR[x,y,z] = Data[x,y,z] / (scalar*spectral_norm[z]*spatial_norm[x,y])
+    # SNR[x,y,z] = Data[x,y,z] / (scale*spectral_norm[z]*spatial_norm[x,y])
     snr = None
 
     
@@ -52,14 +54,15 @@ class Noise:
     def __init__(
         self,
         data,
-        scalar=None,
+        scale=None,
         spatial_norm = None,
         spectral_norm = None):
         """
         Construct a new Noise object.
         """
         self.data = data        
-#        self.spec_axis = data.spec_axis
+# Hardwire spec_axis for now.  Wait for spectral cube.
+        self.spec_axis = 0
         self.distribution = ss.norm
         self.calculate_fit()
         
@@ -75,27 +78,37 @@ class Noise:
 
     def calculate_naive(self):
         """
-        Calculates the naive values for the scalar and norms under the
+        Calculates the naive values for the scale and norms under the
         assumption that the standard deviation is a rigorous method.
         """
-        self.scalar = self.data.std()
-        self.spatial_norm = self.data.std(axis=0)/self.scalar
-        self.spectral_norm = self.data.reshape((self.data.shape[0],
-                                                self.data.shape[1]*
-                                                self.data.shape[2])).\
-                                                std(axis=1)/self.scalar
+        if self.spec_axis !=0:
+            swapa = self.data.swapaxes(0,self.spec_axis)
+        else:
+            swapa = self.data
+        self.scale = swapa.std()
+        self.spatial_norm = swapa.std(axis=0)/self.scale
+        self.spectral_norm = swapa.reshape((swapa.shape[0],
+                                                swapa.shape[1]*
+                                                swapa.shape[2])).\
+                                                std(axis=1)/self.scale
         return
 
     def calculate_mad(self):
         """
-        Calculates the naive values for the scalar and norms under the
+        Calculates the naive values for the scale and norms under the
         assumption that the standard deviation is a rigorous method.
         """
-        self.scalar = mad(self.data)
-        self.spatial_norm = mad(self.data,axis=0)/self.scalar
-        self.spectral_norm = mad(self.data.reshape((self.data.shape[0],
-                                                self.data.shape[1]*
-                                                self.data.shape[2])),axis=1)/self.scalar
+        if self.spec_axis !=0:
+            swapa = self.data.swapaxes(0,self.spec_axis)
+        else:
+            swapa = self.data
+        self.scale = mad(swapa)
+        self.spatial_norm = mad(swapa,axis=0)/self.scale
+        
+        self.spectral_norm = mad(swapa.reshape((swapa.shape[0],
+                                                swapa.shape[1]*
+                                                swapa.shape[2])),axis=1)/\
+                                                self.scale
         return
 
     
@@ -116,8 +129,10 @@ class Noise:
             import matplotlib.pyplot as pl
         except ImportError:
             return
-        xmin = self.distribution.ppf(1e-5,*self.distribution_shape)
-        xmax = self.distribution.ppf(0.99999,*self.distribution_shape)
+
+        xmin = self.distribution.ppf(1./self.data.size,*self.distribution_shape)
+        xmax = self.distribution.ppf(1-1./self.data.size,*self.distribution_shape)
+        print(xmin,xmax)
         xsamples = np.linspace(xmin,xmax,100)
         Nbins = np.min([int(np.sqrt(self.data.size)),100])
         binwidth = (xmax-xmin)/Nbins
@@ -150,9 +165,6 @@ class Noise:
         method="ROBUST",
         timer=False,
         verbose=False,
-        show=False,
-        showbins=100,
-        showsig=5.,
         showlog=True):
         """
         Calculate a single noise estimate for a data set.
@@ -183,44 +195,9 @@ class Noise:
             self.data.data[use],
             method=method)
 
-        # .............................................................
-        # Report and/or plot
-        # .............................................................
-
-        if verbose:
-            print "Fit 1d noise distribution value: ", self.scale
-
-        if show:
-            # Plot a histogram from -5 to +5 sigma
-            med = np.median(self.data.data[use])
-            low = med - showsig*self.scale
-            high = med + showsig*self.scale
-            bin_vals = np.arange(showbins)*(high-low)/(showbins-1.) + low
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            n, bins, patches = ax.hist(
-                self.data.data[use], 
-                bin_vals,
-                facecolor='blue',
-                log=showlog)
-            x_fid = np.arange(10.*showbins)*(high-low)/(showbins*10.) + low
-            y_fid = np.exp(-1.*(x_fid-med)**2/(2.*self.scale**2))* \
-                np.max(n)
-            ax.plot(x_fid,y_fid,'red',linewidth=4,label='fit RMS + median')
-            ax.set_xlabel('Data Value')
-            ax.set_ylabel('Counts')
-            ax.grid=True
-            plt.show()
-
-        # .............................................................
-        # Finish timing
-        # .............................................................
-
         if timer:
             stop=time.time()
             print "Fitting the noise (1d) took ", stop-start
-
-        return
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # Noise Routines
@@ -234,9 +211,10 @@ class Noise:
 # STASTICS HELPER PROCEDURES
 # ------------------------------------------------------------
 
-def mad(data, sigma=True,axis = None):
+def mad(data, sigma=True, axis=None):
     """
-    Return the median absolute deviation.  Axis functionality adapted from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
+    Return the median absolute deviation.  Axis functionality adapted
+    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
     """
     if axis>0:
         med = np.median(data.swapaxes(0,axis),axis=0)
@@ -267,7 +245,7 @@ def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
     perc = float(n_out)/float(n_data)
     if pos_only == False:
         perc *= 2.0
-    return abs(scipy.stats.norm.ppf(perc))
+    return abs(ss.norm.ppf(perc))
 
 # ------------------------------------------------------------
 # Commentary
