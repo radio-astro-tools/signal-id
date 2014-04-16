@@ -1,5 +1,4 @@
-# Mask class, intended to hold masks (as opposed to data or
-# assignment). Extends the cube class.
+# Generate and manipulate three-d Boolean arrays.
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # IMPORTS
@@ -20,24 +19,26 @@ from pyprops import cube, noise
 from struct import *
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-# MASK OBJECT
+# LIGHTWEIGHT OBJECT (HORROR?)
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
-class Mask(cube.Cube):
+class RadioMask(object):
     """
-    ...
+    Holds a binary array with associated metadata.
     """
-
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Attributes (in addition to those in Cube)
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    backup = None
-    linked_data = None
     
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Initialize
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Attributes - may all change but at a baseline we need the WCS,
+    # the numpy boolean array, and (optionally) a backup value
+    
+    # Previous version of the array
+    backup = None
+    implicit_backup = True
+
+    # Current version of the array
+    value = None
+    
+    # The associated cube (holds WCS)
+    linked_data = None
 
     def __init__(
         self,
@@ -47,11 +48,104 @@ class Mask(cube.Cube):
         """
         Construct a new mask object.
         """
-        thresh = kwargs.pop("thresh", 0.5)
-        cube.Cube.__init__(self, *args, **kwargs)        
-        self.data = (self.data > thresh)
-        self.data[self.valid == False] = False
-        self.valid = None
+
+        # --- If it's a another RadioMask, copy it
+
+        # --- If it's a file or a spectral cube, two modes: 
+
+        # (1) read and threshold (e.g., 0.9 or 0.5 - useful to mimic
+        # CASA)
+        
+        # (2) read and start with valid values (default in spectral
+        # cube read)... cube._mask.include
+
+        # in either case, store the supplied cube as linked data.
+
+        pass
+
+        # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+        # I/O
+        # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+        
+
+        # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+        # INFRASTRUCTURE
+        # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+        def enable_backup(self):
+            self.implict_backup = True
+
+        def disable_backup(self):
+            self.implict_backup = False
+
+        def undo(self):
+            temp = self.backup
+            self.backup = self.value
+            self.value = temp
+
+        # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+        # GENERATION
+        # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+# Structured thresholding
+
+# Projected 2d prior ("drop down" a twod mask)
+
+# Projected 3d prior ("inflate" a velocity field)
+
+# Define line-free channels
+
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+# RECIPES
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+# Convolve-then-threshold (2+1d)
+
+# High-reject-grow-low
+
+# Autotune thresholding
+
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+# MANIPULATION
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+# Invert
+
+# Dilation
+
+# Erosion
+
+# Opening
+
+# Closing
+
+# Reject on volume/area/extent
+
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+# STRUCTURING ELEMENTS
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+# Attached utility class
+
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+# EXPOSURE
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+# Achieved via a 1s and 0s spectral cube?
+
+# Max of mask (full coverage in two)
+
+# Sum of mask
+
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+# VISUALIZATION AND DIAGNOSTICS
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+    
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Initialize
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Copy from another cube
