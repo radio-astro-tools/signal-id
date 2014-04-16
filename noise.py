@@ -37,7 +37,7 @@ class Noise:
     distribution_shape = None
 
     # Map of arbitrary shapes for the distribution. 
-    distribution_map = None
+    distribution_shape_map = None
 
     data = None
     spec_axis = None
@@ -144,8 +144,6 @@ class Noise:
         pl.xlabel('Data Value')
         pl.ylabel('Number of Points')
                 
-        
-
 #     def set_spectral_axis(
 #         self,
 #         val=None
@@ -159,6 +157,23 @@ class Noise:
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Generate a noise estimate
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+    def calculate_shape_map(self,
+                            boxsize=10):
+        
+        shape_map = np.zeros(self.data.shape+
+                                             (len(self.distribution_shape),))
+        iterator = np.nditer(self.data,flags=['multi_index'])
+        fill=0
+        shape = (boxsize,boxsize,boxsize)
+
+        while not iterator.finished:
+            position = iterator.multi_index
+            indices_adjacent = [tuple(c) for c in np.add(neighbor_offsets,position)]
+
+            shape_map[iterator.multi_index,:] = self.distribution.fit(self.data[indices_adjacent])
+            iterator.iternext()
+
+        self.distribution_shape_map = shape_map
 
     def calc_1d(
         self, 
