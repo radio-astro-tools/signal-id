@@ -28,6 +28,11 @@ estimates).
 
 * Generates SNR cube when combined with SpectralCube structure.
 
+* Allows smoothing for the noise behavior in the case for
+interfometers or other systems where the noise behavior is expected to
+be smooth (or flat?) with spatial or spectral.
+
+
 The Mask Spec
 =============
 
