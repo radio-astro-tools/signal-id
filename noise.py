@@ -42,9 +42,10 @@ class Noise:
     data = None
     spec_axis = None
 
+    cube = None
     # Holds the signal to noise ratio.
     # SNR[x,y,z] = Data[x,y,z] / (scale*spectral_norm[z]*spatial_norm[x,y])
-    snr = None
+#    snr = None
 
     
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -157,24 +158,66 @@ class Noise:
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Generate a noise estimate
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
-    def calculate_shape_map(self,
-                            boxsize=10):
-        
-        shape_map = np.zeros(self.data.shape+
-                                             (len(self.distribution_shape),))
-        iterator = np.nditer(self.data,flags=['multi_index'])
-        fill=0
-        shape = (boxsize,boxsize,boxsize)
+    def rolling_shape_fit(self,
+                            boxsize=5):
 
+        shape_map = np.zeros(self.data.shape+(len(\
+            self.distribution_shape),))
+        iterator = np.nditer(self.data,flags=['multi_index'])
+        xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
+                                     np.arange(-boxsize,boxsize),
+                                     np.arange(-boxsize,boxsize),
+                                     indexing='ij')
         while not iterator.finished:
             position = iterator.multi_index
-            indices_adjacent = [tuple(c) for c in np.add(neighbor_offsets,position)]
-
-            shape_map[iterator.multi_index,:] = self.distribution.fit(self.data[indices_adjacent])
+            xmatch = xoff+position[0]
+            ymatch = yoff+position[1]
+            zmatch = zoff+position[2]
+            inarray = (xmatch>=0)&(xmatch<self.data.shape[0])&\
+                      (ymatch>=0)&(ymatch<self.data.shape[1])&\
+                      (zmatch>=0)&(zmatch<self.data.shape[2])
+                        
+            shape_map[position[0],
+                      position[1],
+                      position[2],
+                      :]= self.distribution.fit(\
+                self.data[xmatch[inarray].ravel(),
+                          ymatch[inarray].ravel(),
+                          zmatch[inarray].ravel()])
             iterator.iternext()
 
         self.distribution_shape_map = shape_map
 
+    def rolling_shape_mad(self,
+                            boxsize=5):
+
+        shape_map = np.zeros(self.data.shape+(len(\
+            self.distribution_shape),))
+        iterator = np.nditer(self.data,flags=['multi_index'])
+        xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
+                                     np.arange(-boxsize,boxsize),
+                                     np.arange(-boxsize,boxsize),
+                                     indexing='ij')
+
+        while not iterator.finished:
+            position = iterator.multi_index
+            xmatch = xoff+position[0]
+            ymatch = yoff+position[1]
+            zmatch = zoff+position[2]
+            inarray = (xmatch>=0)&(xmatch<self.data.shape[0])&\
+                      (ymatch>=0)&(ymatch<self.data.shape[1])&\
+                      (zmatch>=0)&(zmatch<self.data.shape[2])
+
+            shape_map[position[0],
+                      position[1],
+                      position[2],
+                      1] = mad(self.data[xmatch[inarray].ravel(),
+                                          ymatch[inarray].ravel(),
+                                          zmatch[inarray].ravel()])
+            iterator.iternext()
+
+        self.distribution_shape_map = shape_map
+        
     def calc_1d(
         self, 
         method="ROBUST",
