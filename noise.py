@@ -1,11 +1,22 @@
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-# Importx
+# Imports
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as ss
-import time
+import scipy.signal as ssig
+
+
+# Try to pull in bottleneck and fail over to scipy
+try:
+    from bottleneck import nanmedian, nanstd
+except ImportError:
+    from scipy.stats import nanmedian, nanstd
+
+from spectral_cube.spectral_cube import SpectralCubeMask,SpectralCube
+
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # The Noise Object
@@ -38,34 +49,34 @@ class Noise:
 
     # Map of arbitrary shapes for the distribution. 
     distribution_shape_map = None
-
-    data = None
-    spec_axis = None
-
     cube = None
+
     # Holds the signal to noise ratio.
     # SNR[x,y,z] = Data[x,y,z] / (scale*spectral_norm[z]*spatial_norm[x,y])
-#    snr = None
+    # snr = None
 
     
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Initialize and infrastructure
+    # Initialization
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     def __init__(
         self,
-        data,
+        cube,
         scale=None,
         spatial_norm = None,
         spectral_norm = None):
-        """
-        Construct a new Noise object.
-        """
-        self.data = data        
-# Hardwire spec_axis for now.  Wait for spectral cube.
-        self.spec_axis = 0
+        """Construct a new Noise object."""
+
+        self.cube = cube
         self.distribution = ss.norm
-        self.calculate_fit()
+        if scale is None:
+            self.calculate_fit()
+            self.scale=self.distribution_shape[1] # [1] is the std. of a Gaussian
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Generate noise estimate methods
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
         
     def calculate_fit(self):
         """
@@ -73,7 +84,8 @@ class Noise:
         functionality.  This uses the distribution that characterizes
         the noise values.
         """
-        self.distribution_shape = self.distribution.fit(self.data)
+        self.distribution_shape = self.distribution.fit(\
+            self.cube.flattened())
         return
 
 
@@ -82,88 +94,83 @@ class Noise:
         Calculates the naive values for the scale and norms under the
         assumption that the standard deviation is a rigorous method.
         """
-        if self.spec_axis !=0:
-            swapa = self.data.swapaxes(0,self.spec_axis)
-        else:
-            swapa = self.data
-        self.scale = swapa.std()
-        self.spatial_norm = swapa.std(axis=0)/self.scale
-        self.spectral_norm = swapa.reshape((swapa.shape[0],
-                                                swapa.shape[1]*
-                                                swapa.shape[2])).\
-                                                std(axis=1)/self.scale
+
+        swapa = self.cube.get_filled_data().astype('=f')
+        
+        self.scale = nanstd(swapa)
+        self.spatial_norm = nanstd(swapa,axis=0)/self.scale
+        self.spectral_norm = nanstd(swapa.reshape((swapa.shape[0],
+                                                   swapa.shape[1]*
+                                                   swapa.shape[2])),
+                                    axis=1)/self.scale
         return
 
-    def calculate_mad(self):
+    def calculate_mad(self,niter=1,spatial_smooth=None,spectral_smooth=None):
         """
         Calculates the naive values for the scale and norms under the
-        assumption that the standard deviation is a rigorous method.
+        assumption that the median absolute deviation is a rigorous method.
         """
-        if self.spec_axis !=0:
-            swapa = self.data.swapaxes(0,self.spec_axis)
-        else:
-            swapa = self.data
-        self.scale = mad(swapa)
-        self.spatial_norm = mad(swapa,axis=0)/self.scale
-        
-        self.spectral_norm = mad(swapa.reshape((swapa.shape[0],
-                                                swapa.shape[1]*
-                                                swapa.shape[2])),axis=1)/\
-                                                self.scale
+
+        data = self.cube.get_filled_data().astype('=f')
+        self.scale = nanmad(data)
+        if self.spatial_norm is None:
+            self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
+            self.spectral_norm = np.ones((data.shape[0]))
+        for count in range(niter):
+            scale = self.get_scale_cube()
+            snr = data/scale
+            self.spatial_norm = nanmad(snr,axis=0)
+            if spatial_smooth is not None:
+                self.spatial_norm = ssig.medfilt2d(self.spatial_norm,kernel_size=spatial_smooth)
+
+            snr = data/self.get_scale_cube()
+            self.spectral_norm = nanmad(snr.reshape((snr.shape[0],
+                                                     snr.shape[1]*
+                                                     snr.shape[2])),
+                                        axis=1)
+            if spectral_smooth is not None:
+                self.spectral_norm = ssig.medfilt(self.spectral_norm,kernel_size=spectral_smooth)
+
+        self.distribution_shape=(0,self.scale)    
         return
 
-    
-    def cube_of_noise(self):
-        """
-        Generates a matched data set of pure noise with properties matching
-        the stated distribution.
-        """
-        return self.distribution.rvs(*self.distribution_shape,
-                                     size=self.data.shape)
 
-    def plot_noise(self):
+    def calculate_std(self,niter=1,spatial_smooth=None,spectral_smooth=None):
         """
-        Makes a plot of the data distribution and the estimated
-        parameters of the PDF.
+        Calculates the naive values for the scale and norms under the
+        assumption that the median absolute deviation is a rigorous method.
         """
-        try:
-            import matplotlib.pyplot as pl
-        except ImportError:
-            return
 
-        xmin = self.distribution.ppf(1./self.data.size,*self.distribution_shape)
-        xmax = self.distribution.ppf(1-1./self.data.size,*self.distribution_shape)
-        print(xmin,xmax)
-        xsamples = np.linspace(xmin,xmax,100)
-        Nbins = np.min([int(np.sqrt(self.data.size)),100])
-        binwidth = (xmax-xmin)/Nbins
-        pl.xlim(xmin,xmax)
-        pl.hist(self.data.ravel(),bins = Nbins,log=True)
-        pl.plot(xsamples,binwidth*self.data.size*
-                self.distribution.pdf(xsamples,*self.distribution_shape),
-                linewidth=4,alpha=0.75)
-        pl.xlabel('Data Value')
-        pl.ylabel('Number of Points')
-                
-#     def set_spectral_axis(
-#         self,
-#         val=None
-#         ):
-#         """
-#         Set the spectral axis.
-#         """
-#         if val is not None:
-#             self.spec_axis = val
+        data = self.cube.get_filled_data().astype('=f')
+        self.scale = nanstd(data)
+        if self.spatial_norm is None:
+            self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
+            self.spectral_norm = np.ones((data.shape[0]))
+        for count in range(niter):
+            scale = self.get_scale_cube()
+            snr = data/scale
+            self.spatial_norm = nanstd(snr,axis=0)
+            if spatial_smooth is not None:
+                self.spatial_norm = ssig.medfilt2d(self.spatial_norm,kernel_size=spatial_smooth)
 
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Generate a noise estimate
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+            snr = data/self.get_scale_cube()
+            self.spectral_norm = nanstd(snr.reshape((snr.shape[0],
+                                                     snr.shape[1]*
+                                                     snr.shape[2])),
+                                        axis=1)
+            if spectral_smooth is not None:
+                self.spectral_norm = ssig.medfilt(self.spectral_norm,kernel_size=spectral_smooth)
+
+        self.distribution_shape=(0,self.scale)    
+        return
+
     def rolling_shape_fit(self,
                             boxsize=5):
 
-        shape_map = np.zeros(self.data.shape+(len(\
+        shape_map = np.zeros(self.cube.shape+(len(\
             self.distribution_shape),))
-        iterator = np.nditer(self.data,flags=['multi_index'])
+        data = self.cube.get_filled_data()
+        iterator = np.nditer(data,flags=['multi_index'])
         xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
                                      np.arange(-boxsize,boxsize),
                                      np.arange(-boxsize,boxsize),
@@ -173,17 +180,16 @@ class Noise:
             xmatch = xoff+position[0]
             ymatch = yoff+position[1]
             zmatch = zoff+position[2]
-            inarray = (xmatch>=0)&(xmatch<self.data.shape[0])&\
-                      (ymatch>=0)&(ymatch<self.data.shape[1])&\
-                      (zmatch>=0)&(zmatch<self.data.shape[2])
+            inarray = (xmatch>=0)&(xmatch<data.shape[0])&\
+                      (ymatch>=0)&(ymatch<data.shape[1])&\
+                      (zmatch>=0)&(zmatch<data.shape[2])
                         
             shape_map[position[0],
                       position[1],
-                      position[2],
-                      :]= self.distribution.fit(\
-                self.data[xmatch[inarray].ravel(),
-                          ymatch[inarray].ravel(),
-                          zmatch[inarray].ravel()])
+                      position[2],:] = self.distribution.fit(\
+                                    data[xmatch[inarray].ravel(),
+                                         ymatch[inarray].ravel(),
+                                         zmatch[inarray].ravel()])
             iterator.iternext()
 
         self.distribution_shape_map = shape_map
@@ -191,9 +197,10 @@ class Noise:
     def rolling_shape_mad(self,
                             boxsize=5):
 
-        shape_map = np.zeros(self.data.shape+(len(\
+        shape_map = np.zeros(self.cube.shape+(len(\
             self.distribution_shape),))
-        iterator = np.nditer(self.data,flags=['multi_index'])
+        data = self.cube.get_filled_data()
+        iterator = np.nditer(data,flags=['multi_index'])
         xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
                                      np.arange(-boxsize,boxsize),
                                      np.arange(-boxsize,boxsize),
@@ -204,19 +211,96 @@ class Noise:
             xmatch = xoff+position[0]
             ymatch = yoff+position[1]
             zmatch = zoff+position[2]
-            inarray = (xmatch>=0)&(xmatch<self.data.shape[0])&\
-                      (ymatch>=0)&(ymatch<self.data.shape[1])&\
-                      (zmatch>=0)&(zmatch<self.data.shape[2])
+            inarray = (xmatch>=0)&(xmatch<data.shape[0])&\
+                      (ymatch>=0)&(ymatch<data.shape[1])&\
+                      (zmatch>=0)&(zmatch<data.shape[2])
 
             shape_map[position[0],
                       position[1],
                       position[2],
-                      1] = mad(self.data[xmatch[inarray].ravel(),
-                                          ymatch[inarray].ravel(),
-                                          zmatch[inarray].ravel()])
+                      1] = nanmad(data[xmatch[inarray].ravel(),
+                                       ymatch[inarray].ravel(),
+                                       zmatch[inarray].ravel()])
             iterator.iternext()
 
         self.distribution_shape_map = shape_map
+
+    def mask_out_signal(self,niter=1):
+        for count in range(niter):
+            if self.spatial_norm is not None:
+                noise = self.get_scale_cube()
+                snr = self.cube.get_filled_data()/noise
+            else:
+                snr = self.cube.get_filled_data()/self.scale
+            newmask = SpectralCubeMask(np.abs(snr)<sig_n_outliers(self.cube.size),self.cube.wcs)
+            self.cube = self.cube.apply_mask(newmask)
+
+    def get_scale_cube(self):
+        ax0 = np.reshape(self.spectral_norm,(self.spectral_norm.shape+tuple((1,1))))
+        ax12 = np.reshape(self.spatial_norm,tuple((1,))+self.spatial_norm.shape)
+        noise = (ax12*ax0)*self.scale
+        return noise
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Visualization and analysis methods
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+
+
+    def cube_of_noise(self):
+        """
+        Generates a matched data set of pure noise with properties matching
+        the stated distribution.
+        """
+        return self.distribution.rvs(*self.distribution_shape,
+                                     size=self.cube.shape)
+
+    def plot_noise(self,normalize=True):
+        """
+        Makes a plot of the data distribution and the estimated
+        parameters of the PDF.
+        """
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return
+
+        if normalize:
+            xmin = self.distribution.ppf(1./self.cube.size,0,1)
+            xmax = self.distribution.ppf(1-1./self.cube.size,0,1)
+            xsamples = np.linspace(xmin,xmax,100)
+            Nbins = np.min([int(np.sqrt(self.cube.size)),100])
+            binwidth = (xmax-xmin)/Nbins
+            plt.xlim(xmin,xmax)
+            data = self.cube.get_filled_data().astype('=f')
+            scale = self.get_scale_cube()
+            snr = data/scale
+            plotdata = snr[np.isfinite(snr)].ravel()
+            plt.hist(plotdata,bins=Nbins,log=True)
+            plt.plot(xsamples,binwidth*self.cube.size*
+                     self.distribution.pdf(xsamples,0,1),
+                     linewidth=4,alpha=0.75)
+            plt.xlabel('Normalized Signal-to-Noise Ratio')
+            plt.ylabel('Number of Points')
+
+
+        else:
+            xmin = self.distribution.ppf(1./self.cube.size,*
+                                         self.distribution_shape)
+            xmax = self.distribution.ppf(1-1./self.cube.size,*
+                                         self.distribution_shape)
+            xsamples = np.linspace(xmin,xmax,100)
+            Nbins = np.min([int(np.sqrt(self.cube.size)),100])
+            binwidth = (xmax-xmin)/Nbins
+            plt.xlim(xmin,xmax)
+            plotdata = self.cube.flattened()            
+
+            plt.hist(plotdata,bins=Nbins,log=True)
+            plt.plot(xsamples,binwidth*self.cube.size*
+                     self.distribution.pdf(xsamples,*self.distribution_shape),
+                     linewidth=4,alpha=0.75)
+            plt.xlabel('Data Value')
+            plt.ylabel('Number of Points')
+
         
     def calc_1d(
         self, 
@@ -257,17 +341,12 @@ class Noise:
             stop=time.time()
             print "Fitting the noise (1d) took ", stop-start
 
-# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-# Noise Routines
-# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-
-# These may be of general use and so are not part of the noise
-# class. Instead they can be called piecemeal.
-
 
 # ------------------------------------------------------------
 # STASTICS HELPER PROCEDURES
 # ------------------------------------------------------------
+# These may be of general use and so are not part of the noise
+# class. Instead they can be called piecemeal.
 
 def mad(data, sigma=True, axis=None):
     """
@@ -280,6 +359,22 @@ def mad(data, sigma=True, axis=None):
     else:
         med = np.median(data,axis=axis)
         mad = np.median(np.abs(data - med),axis=axis)
+    if sigma==False:
+        return mad
+    else:
+        return mad*1.4826
+
+def nanmad(data, sigma=True, axis=None):
+    """
+    Return the median absolute deviation.  Axis functionality adapted
+    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
+    """
+    if axis>0:
+        med = nanmedian(data.swapaxes(0,axis),axis=0)
+        mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
+    else:
+        med = nanmedian(data,axis=axis)
+        mad = nanmedian(np.abs(data - med),axis=axis)
     if sigma==False:
         return mad
     else:
