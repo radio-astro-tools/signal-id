@@ -302,44 +302,6 @@ class Noise:
             plt.ylabel('Number of Points')
 
         
-    def calc_1d(
-        self, 
-        method="ROBUST",
-        timer=False,
-        verbose=False,
-        showlog=True):
-        """
-        Calculate a single noise estimate for a data set.
-        """
-
-        # .............................................................
-        # Time the operation if requested.
-        # .............................................................
-
-        if timer:
-            start=time.time()
-
-        # .............................................................
-        # Fit the 1-d noise distribution
-        # .............................................................
-
-        # Identify which values to fit - the data are valid and there
-        # is no signal associated with them.
-
-        use = self.data.valid
-        if self.signal != None:
-            use *= (self.signal.data == False)
-        if self.data.signal != None:
-            use *= (self.data.signal.data == False)
-        
-        # Call the external noise fitter
-        self.scale = est_noise_1d(
-            self.data.data[use],
-            method=method)
-
-        if timer:
-            stop=time.time()
-            print "Fitting the noise (1d) took ", stop-start
 
 
 # ------------------------------------------------------------
