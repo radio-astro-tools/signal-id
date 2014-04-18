@@ -50,13 +50,14 @@ class Noise:
 
     # This is a spatial map of the width parameter
     spatial_norm = None
+    spatial_footprint = None
 
     # This is the 1D spectral normalization constructed so
     # that spectral_norm[channel] * map[x,y] = noise width at
     # this point in cube
 
     spectral_norm = None
-
+    spectral_footprint = None
     # Noise distribution comaptible with scipy
     distribution = None
     distribution_shape = None
@@ -86,6 +87,7 @@ class Noise:
         # cube is an instance of SpectralCube
         if isinstance(cube,SpectralCube):
             self.cube = cube
+            self.spatial_footprint = np.any(cube.get_mask_array(),axis=0)
         if isinstance(beam,Beam):
             self.beam = beam
         self.distribution = ss.norm
@@ -182,7 +184,7 @@ class Noise:
             if self.beam is not None:
                 self.spatial_norm = convolve_fft(self.spatial_norm, 
                     self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                    interpolate_nan=True)
+                    interpolate_nan=True,normalize_kernel=True)
             else:
                 self.spatial_norm = np.ones([data.shape[1],data.shape[2]])
             if not spectral_flat:
@@ -196,8 +198,9 @@ class Noise:
                         kernel_size=spectral_smooth)
             else:
                 self.spectral_norm = np.ones((data.shape[0]))
-#        self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
-#        self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
+        self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
+        self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
+        self.spatial_norm[~self.spatial_footprint]=np.nan
         self.distribution_shape=(0,self.scale)
         return
 
@@ -219,8 +222,7 @@ class Noise:
             if beam is not None:
                 self.spatial_norm = convolve_fft(self.spatial_norm, 
                     self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                    interpolate_nan=True)
-
+                    interpolate_nan=True,normalize_kernel=True)
             if spatial_smooth is not None:
                 self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
                     kernel_size=spatial_smooth)
@@ -235,6 +237,7 @@ class Noise:
                     kernel_size=spectral_smooth)
         self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
         self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
+        self.spatial_norm[~self.spatial_footprint]=np.nan
         self.distribution_shape=(0,self.scale)    
         return
 
@@ -351,17 +354,19 @@ class Noise:
         Generates a matched data set of pure noise with properties matching
         the stated distribution.
 
-        Parameters
-        ----------
-        beam : a radio_beam.Beam object describing the beam shape.  
         """
         if self.spatial_norm is None:
             return self.distribution.rvs(*self.distribution_shape,
                 size=self.cube.shape)
         else:
-            noise = numpy.random.randn(*self.cube.shape)
+            noise = np.random.randn(*self.cube.shape)
             if self.beam is not None:
                 self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
+                # Iterate convolution over plane (ugh)
+                for plane in np.arange(self.cube.shape[0]):
+                    noise[plane,:,:] = convolve_fft(noise[plane,:,:],
+                        self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
+                        normalize_kernel=True)
             return noise * self.get_scale_cube()
 
     def plot_noise(self,normalize=True):
@@ -478,28 +483,12 @@ def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
         perc *= 2.0
     return abs(ss.norm.ppf(perc))
 
-def get_pixel_scales(mywcs, assert_square=True):
+def get_pixel_scales(mywcs):
     # borrowed from @keflavich who borrowed from aplpy
     mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
-    cdelt = np.matrix(mywcs.wcs.get_cdelt())
-    pc = np.matrix(mywcs.wcs.get_pc())
-    scale = np.array(cdelt * pc)
-    
-    if (assert_square and
-        (abs(cdelt[0,0]) != abs(cdelt[0,1]) or
-         abs(pc[0,0]) != abs(pc[1,1]) or
-         abs(scale[0,0]) != abs(scale[0,1]))):
-        raise ValueError("Non-square pixels.  Please resample data.")
-
-    return abs(scale[0,0])
-# ------------------------------------------------------------
-# Commentary
-# ------------------------------------------------------------
-
-# In theory the masked array class inside of numpy should expedite
-# handling of blanked data (similarly the scipy.stats.nanmedian or
-# nanstd functions). However, the masked array median operator seems
-# to be either broken or infeasibly slow. This forces us into loops,
-# which (shockingly) work out to be the fastest of the ways I have
-# tried, but are still far from good.
-    
+    cdelt = np.array(mywcs.wcs.get_cdelt())
+    pc = np.array(mywcs.wcs.get_pc())
+    # I too like to live dangerously:
+    scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
+     cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
+    return abs(scale[0])
