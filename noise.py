@@ -128,7 +128,7 @@ class Noise:
         Parameters: None
         """
 
-        swapa = self.cube.get_filled_data().astype('=f')
+        swapa = self.cube.filled_data[:].astype('=f')
         
         self.scale = nanstd(swapa)
         self.spatial_norm = nanstd(swapa,axis=0)/self.scale
@@ -169,7 +169,7 @@ class Noise:
         in place.
         """
 
-        data = self.cube.get_filled_data().astype('=f')
+        data = self.cube.filled_data[:].astype('=f')
         self.scalar_noise()
         if self.spatial_norm is None:
             self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
@@ -210,7 +210,7 @@ class Noise:
         assumption that the median absolute deviation is a rigorous method.
         """
 
-        data = self.cube.get_filled_data().astype('=f')
+        data = self.cube.filled_data[:].astype('=f')
         self.scale = nanstd(data)
         if self.spatial_norm is None:
             self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
@@ -258,7 +258,7 @@ class Noise:
         """
         shape_map = np.zeros(self.cube.shape+(len(\
             self.distribution_shape),))
-        data = self.cube.get_filled_data()
+        data = self.cube.filled_data[:]
         iterator = np.nditer(data,flags=['multi_index'])
         xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
                                      np.arange(-boxsize,boxsize),
@@ -288,7 +288,7 @@ class Noise:
 
         shape_map = np.zeros(self.cube.shape+(len(\
             self.distribution_shape),))
-        data = self.cube.get_filled_data()
+        data = self.cube.filled_data[:]
         iterator = np.nditer(data,flags=['multi_index'])
         xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
                                      np.arange(-boxsize,boxsize),
@@ -330,13 +330,13 @@ class Noise:
         for count in range(niter):
             if self.spatial_norm is not None:
                 noise = self.get_scale_cube()
-                snr = self.cube.get_filled_data()/noise
+                snr = self.cube.filled_data[:]/noise
             else:
-                snr = self.cube.get_filled_data()/self.scale
+                snr = self.cube.filled_data[:]/self.scale
             # Include negatives in the signal mask or not?
             newmask = SpectralCubeMask(np.abs(snr)<
                 sig_n_outliers(self.cube.size),self.cube.wcs)
-            self.cube = self.cube.apply_mask(newmask)
+            self.cube = self.cube.with_mask(newmask)
 
     def get_scale_cube(self):
         ax0 = np.reshape(self.spectral_norm,(self.spectral_norm.shape+tuple((1,1))))
@@ -392,7 +392,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            data = self.cube.get_filled_data().astype('=f')
+            data = self.cube.filled_data[:].astype('=f')
             scale = self.get_scale_cube()
             snr = data/scale
             plotdata = snr[np.isfinite(snr)].ravel()
