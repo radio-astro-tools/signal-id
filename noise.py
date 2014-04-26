@@ -2,6 +2,7 @@
 # Imports
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
+# Standard imports should always work
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,23 +10,29 @@ import scipy.stats as ss
 import scipy.signal as ssig
 import warnings
 
-import astropy.wcs
-from astropy.convolution import convolve_fft,convolve
-
-from spectral_cube.spectral_cube import SpectralCubeMask,SpectralCube
-
-# Try to pull in bottleneck and fail over to scipy
+# Try to pull in bottleneck (a faster implementation of some numpy
+# functions) and default to scipy if this fails
 try:
     from bottleneck import nanmedian, nanstd
 except ImportError:
     from scipy.stats import nanmedian, nanstd
 
-# Try import of radio_beam
+# Astropy - used for convolution and WCS
+import astropy.wcs
+from astropy.convolution import convolve_fft,convolve
+
+# Spectral cube object from radio-astro-tools
+from spectral_cube.spectral_cube import SpectralCubeMask,SpectralCube
+
+# Radio beam object from radio-astro-tools
 try:
     from radio_beam import Beam
 except ImportError:
     warnings.warn("No radio_beam.Beam instances found. Convolution\
      with radio beams will not work")
+
+# Utility functions from this package
+from utils import *
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # The Noise Object
@@ -58,12 +65,15 @@ class Noise:
 
     spectral_norm = None
     spectral_footprint = None
+
     # Noise distribution comaptible with scipy
     distribution = None
     distribution_shape = None
 
     # Map of arbitrary shapes for the distribution. 
     distribution_shape_map = None
+
+    # Associated data cube and beam
     cube = None
     beam = None
 
@@ -84,16 +94,57 @@ class Noise:
         beam = None):
         """Construct a new Noise object."""
 
-        # cube is an instance of SpectralCube
         if isinstance(cube,SpectralCube):
             self.cube = cube
             self.spatial_footprint = np.any(cube.get_mask_array(),axis=0)
+
         if isinstance(beam,Beam):
             self.beam = beam
+
         self.distribution = ss.norm
+
         if scale is None:
             self.calculate_fit()
             self.scalar_noise() # [1] is the std. of a Gaussian
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Expose the noise in various ways
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+    def get_scale_cube(self):
+        """
+        Return a cube of noise width estimates.
+        """
+        ax0 = np.reshape(self.spectral_norm, 
+                         (self.spectral_norm.shape+tuple((1,1))))
+        ax12 = np.reshape(self.spatial_norm,
+                          tuple((1,))+self.spatial_norm.shape)
+        noise = (ax12*ax0)*self.scale
+        return noise
+
+    def cube_of_noise(self):
+        """
+        Generates a matched data set of pure noise with properties matching
+        the stated distribution.
+        """
+        if self.spatial_norm is None:
+            return self.distribution.rvs(*self.distribution_shape,
+                size=self.cube.shape)
+        else:
+            noise = np.random.randn(*self.cube.shape)
+            if self.beam is not None:
+                self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
+                # Iterate convolution over plane (ugh)
+                for plane in np.arange(self.cube.shape[0]):
+                    noise[plane,:,:] = convolve_fft(noise[plane,:,:],
+                        self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
+                        normalize_kernel=True)
+            return noise * self.get_scale_cube()
+
+    def snr(self):
+        """
+        Return a signal-to-noise cube.
+        """
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Generate noise estimate methods
@@ -118,7 +169,6 @@ class Noise:
         negs = negs[negs<0]
         self.scale = nanmad(negs)
         return
-
 
     def calculate_naive(self):
         """
@@ -338,38 +388,11 @@ class Noise:
                 sig_n_outliers(self.cube.size),self.cube.wcs)
             self.cube = self.cube.apply_mask(newmask)
 
-    def get_scale_cube(self):
-        ax0 = np.reshape(self.spectral_norm,(self.spectral_norm.shape+tuple((1,1))))
-        ax12 = np.reshape(self.spatial_norm,tuple((1,))+self.spatial_norm.shape)
-        noise = (ax12*ax0)*self.scale
-        return noise
-
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Visualization and analysis methods
+    # Visualization methods
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
 
-
-    def cube_of_noise(self):
-        """
-        Generates a matched data set of pure noise with properties matching
-        the stated distribution.
-
-        """
-        if self.spatial_norm is None:
-            return self.distribution.rvs(*self.distribution_shape,
-                size=self.cube.shape)
-        else:
-            noise = np.random.randn(*self.cube.shape)
-            if self.beam is not None:
-                self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
-                # Iterate convolution over plane (ugh)
-                for plane in np.arange(self.cube.shape[0]):
-                    noise[plane,:,:] = convolve_fft(noise[plane,:,:],
-                        self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                        normalize_kernel=True)
-            return noise * self.get_scale_cube()
-
-    def plot_noise(self,normalize=True):
+    def plot_histogram(self,normalize=True):
         """
         Makes a plot of the data distribution and the estimated
         parameters of the PDF.
@@ -380,6 +403,7 @@ class Noise:
         spectrally varying noise scale to cast the plot in terms of 
         signal-to-noise ratio. Default: True
         """
+
         try:
             import matplotlib.pyplot as plt
         except ImportError:
@@ -403,7 +427,6 @@ class Noise:
             plt.xlabel('Normalized Signal-to-Noise Ratio')
             plt.ylabel('Number of Points')
 
-
         else:
             xmin = self.distribution.ppf(1./self.cube.size,*
                                          self.distribution_shape)
@@ -422,73 +445,33 @@ class Noise:
             plt.xlabel('Data Value')
             plt.ylabel('Number of Points')
 
-        
+    def plot_spectrum(self):
+        """
+        Makes a plot of the spectral variation of the noise.
+        """
 
+        if self.spectral_norm is None:
+            return
 
-# ------------------------------------------------------------
-# STASTICS HELPER PROCEDURES
-# ------------------------------------------------------------
-# These may be of general use and so are not part of the noise
-# class. Instead they can be called piecemeal.
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return
 
-def mad(data, sigma=True, axis=None):
-    """
-    Return the median absolute deviation.  Axis functionality adapted
-    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
-    """
-    if axis>0:
-        med = np.median(data.swapaxes(0,axis),axis=0)
-        mad = np.median(np.abs(data.swapaxes(0,axis) - med),axis=0)
-    else:
-        med = np.median(data,axis=axis)
-        mad = np.median(np.abs(data - med),axis=axis)
-    if sigma==False:
-        return mad
-    else:
-        return mad*1.4826
+        channel = np.arange(len(self.spectral_norm))
+        plt.plot(channel, self.spectral_norm)
 
-def nanmad(data, sigma=True, axis=None):
-    """
-    Return the median absolute deviation.  Axis functionality adapted
-    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
-    """
-    if axis>0:
-        med = nanmedian(data.swapaxes(0,axis),axis=0)
-        mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
-    else:
-        med = nanmedian(data,axis=axis)
-        mad = nanmedian(np.abs(data - med),axis=axis)
-    if not sigma:
-        return mad
-    else:
-        return mad*1.4826
+    def plot_map(self):
+        """
+        Makes a plot of the spatial variation of the noise.
+        """
 
-def sigma_rob(data, iterations=1, thresh=3.0):
-    """
-    Iterative m.a.d. based sigma with positive outlier rejection.
-    """
-    noise = mad(data)
-    for i in range(iterations):
-        ind = (data <= thresh*noise).nonzero()
-        noise = mad(data[ind])
-    return noise
+        if self.spatial_norm is None:
+            return
 
-def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
-    """
-    Return the sigma needed to expect n (default 1) outliers given
-    n_data points.
-    """
-    perc = float(n_out)/float(n_data)
-    if pos_only == False:
-        perc *= 2.0
-    return abs(ss.norm.ppf(perc))
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return
 
-def get_pixel_scales(mywcs):
-    # borrowed from @keflavich who borrowed from aplpy
-    mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
-    cdelt = np.array(mywcs.wcs.get_cdelt())
-    pc = np.array(mywcs.wcs.get_pc())
-    # I too like to live dangerously:
-    scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
-     cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
-    return abs(scale[0])
+        plt.imshow(channel, self.spatial_norm, origin="lower")
