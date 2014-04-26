@@ -49,7 +49,7 @@ class RadioMask(object):
     # The associated cube
     _linked_data = None
 
-    # TBD: noise
+    # TBD: noise / SNR cube
 
     # TBD: beam
 
@@ -137,7 +137,7 @@ class RadioMask(object):
         print "Cube insufficiently specified."
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Expose the value
+    # Expose the mask in various ways
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     def as_array(self):
@@ -162,6 +162,9 @@ class RadioMask(object):
         else:
             return np.vstack(np.where(self._value)).transpose()
         
+    def oned(self, axis=0, sum=False):
+        raise NotImplementedError()
+        
     def twod(self, axis=0, sum=False):
         """
         Return a two-dimensional version of the mask.
@@ -173,8 +176,15 @@ class RadioMask(object):
         else:
             return (np.sum(self._value, axis=axis))
 
-    # Slices, Subcube suggestions
-        
+    def independent_channels(self, struct=None):
+        raise NotImplementedError()
+
+    def independent_areas(self,struct=None):
+        raise NotImplementedError()
+
+    def independent_cubes(self,struct=None):):
+        raise NotImplementedError()
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Undo/Redo
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -194,26 +204,60 @@ class RadioMask(object):
         self._value = temp
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # MANIPULATION
+    # Operators
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    # Invert
+    # Union
+    def union(self, other):
+        raise NotImplementedError()
+
+    # Intersection
+    def intersection(self, other):
+        raise NotImplementedError()
+
+    # Exclusive or
+    def xor(self, other):
+        raise NotImplementedError()
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Manipulation
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+    # Inversion
+    def invert(self, struct=None):
+        raise NotImplementedError()
     
     # Dilation
+    def dilate(self, struct=None):
+        raise NotImplementedError()
     
     # Erosion
+    def erode(self, struct=None):
+        raise NotImplementedError()
     
     # Opening
+    def open(self, struct=None):
+        raise NotImplementedError()
 
     # Closing
+    def close(self, struct=None):
+        raise NotImplementedError()
     
-    # Reject on volume/area/extent
+    # Reject on property
+    def reject_region(self, func=None, thresh=None, struct=None):
+        raise NotImplementedError()
+
+    # Reject on volume (special case)
+    def reject_on_volume(self, thresh=None, struct=None):
+        raise NotImplementedError()
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Mask generation
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     # Structured thresholding
+    def threshold(self, thresh=None, struct=None):
+        raise NotImplementedError()
 
     # Projected 2d prior ("drop down" a twod mask)
     
