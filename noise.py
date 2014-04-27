@@ -361,14 +361,17 @@ class Noise:
         else:
             noise = np.random.randn(*self.cube.shape)
             if self.beam is not None:
-                self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
+            	kernel = self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
+                # I really don't think the sqrt(2) should be at the end
+                # of this line but it doesn't work without it??
+                rescale = np.sqrt((kernel.array/np.max(kernel.array)).sum())*\
+                          np.sqrt(2)
                 # Iterate convolution over plane (ugh)
                 for plane in np.arange(self.cube.shape[0]):
-                    noise[plane,:,:] = convolve_fft(noise[plane,:,:],
-                        self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                        normalize_kernel=True)
-                noise = noise/np.nanstd(noise)
-            return noise * self.get_scale_cube()
+                    noise[plane,:,:] = convolve_fft(noise[plane,:,:],\
+                		kernel, normalize_kernel=True)*rescale
+                noise = noise*self.get_scale_cube()
+                return SpectralCube(noise,self.cube.wcs)
 
     def plot_noise(self,normalize=True):
         """
