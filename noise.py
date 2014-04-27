@@ -12,7 +12,7 @@ import warnings
 import astropy.wcs
 from astropy.convolution import convolve_fft,convolve
 
-from spectral_cube.spectral_cube import SpectralCubeMask,SpectralCube
+from spectral_cube import SpectralCubeMask,SpectralCube
 
 # Try to pull in bottleneck and fail over to scipy
 try:
@@ -367,6 +367,7 @@ class Noise:
                     noise[plane,:,:] = convolve_fft(noise[plane,:,:],
                         self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
                         normalize_kernel=True)
+                noise = noise/np.nanstd(noise)
             return noise * self.get_scale_cube()
 
     def plot_noise(self,normalize=True):
