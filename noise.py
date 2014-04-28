@@ -30,7 +30,7 @@ import astropy.wcs
 from astropy.convolution import convolve_fft,convolve
 
 # Spectral cube object from radio-astro-tools
-from spectral_cube.spectral_cube import SpectralCubeMask,SpectralCube
+from spectral_cube import SpectralCubeMask,SpectralCube
 
 # Radio beam object from radio-astro-tools
 try:
@@ -216,9 +216,10 @@ class Noise:
         # general thing with multiple methods exposed or (b) just
         # something that gets done as a subset of the 
 
-        negs = self.cube.flattened().astype('=f')
+        negs = self.cube.flattened().value.astype('=f')
         negs = negs[negs<0]
-        self.scale = nanmad([negs,-1*negs])
+        print(len(negs))
+        self.scale = nanmad(np.hstack([negs,-1*negs]), median_value=0.0)
         return
 
     def calculate_std(
@@ -237,7 +238,7 @@ class Noise:
         # here.
         
         # Extract the data from the spectral cube object
-        data = self.cube.filled_data[:].astype('=f')
+        data = self.cube.filled_data[:].value.astype('=f')
         
         # Calculate the overall scale
         self.scale = nanstd(data)
@@ -302,7 +303,7 @@ class Noise:
         # in here if they are going to be used in the actual estimation
         
         # Access the data in the spectral cube
-        data = self.cube.filled_data[:].astype('=f')
+        data = self.cube.filled_data[:].value.astype('=f')
 
         # Estimate the noise
         self.scalar_noise()
@@ -362,7 +363,7 @@ class Noise:
         assumption that the median absolute deviation is a rigorous method.
         """
 
-        data = self.cube.filled_data[:].astype('=f')
+        data = self.cube.filled_data[:].value.astype('=f')
         self.scale = nanstd(data)
         if self.spatial_norm is None:
             self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
@@ -404,7 +405,7 @@ class Noise:
         the noise values.
         """
         self.distribution_shape = self.distribution.fit(\
-            self.cube.flattened())
+            self.cube.flattened().value)
         return
 
     def rolling_shape_fit(
@@ -443,7 +444,7 @@ class Noise:
             self.distribution_shape),))
 
         # Get the data from the spectral cube object
-        data = self.cube.filled_data[:]
+        data = self.cube.filled_data[:].value
 
         # Initialize an iterator over the cube
         iterator = np.nditer(data,flags=['multi_index'])
@@ -520,9 +521,9 @@ class Noise:
         for count in range(niter):
             if self.spatial_norm is not None:
                 noise = self.get_scale_cube()
-                snr = self.cube.filled_data[:]/noise
+                snr = self.cube.filled_data[:].value/noise
             else:
-                snr = self.cube.filled_data[:]/self.scale
+                snr = self.cube.filled_data[:].value/self.scale
             # Include negatives in the signal mask or not?
             newmask = SpectralCubeMask(np.abs(snr)<
                 sig_n_outliers(self.cube.size),self.cube.wcs)
@@ -556,7 +557,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            data = self.cube.filled_data[:].astype('=f')
+            data = self.cube.filled_data[:].value.astype('=f')
             scale = self.get_scale_cube()
             snr = data/scale
             plotdata = snr[np.isfinite(snr)].ravel()
@@ -576,7 +577,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            plotdata = self.cube.flattened()            
+            plotdata = self.cube.flattened().value            
 
             plt.hist(plotdata,bins=Nbins,log=True)
             plt.plot(xsamples,binwidth*self.cube.size*
@@ -636,16 +637,22 @@ def mad(data, sigma=True, axis=None):
     else:
         return mad*1.4826
 
-def nanmad(data, sigma=True, axis=None):
+def nanmad(data, sigma=True, axis=None, median_value=None):
     """
     Return the median absolute deviation.  Axis functionality adapted
     from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
     """
     if axis>0:
-        med = nanmedian(data.swapaxes(0,axis),axis=0)
+        if median_value is None:
+            med = nanmedian(data.swapaxes(0,axis),axis=0)
+        else:
+            med = median_value
         mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
     else:
-        med = nanmedian(data,axis=axis)
+        if median_value is None:
+            med = nanmedian(data,axis=axis)
+        else:
+            med = median_value
         mad = nanmedian(np.abs(data - med),axis=axis)
     if not sigma:
         return mad
