@@ -18,17 +18,8 @@ import scipy.stats as ss
 import scipy.signal as ssig
 import warnings
 
-<<<<<<< HEAD
-import astropy.wcs
-from astropy.convolution import convolve_fft,convolve
-
-from spectral_cube import SpectralCubeMask,SpectralCube
-
-# Try to pull in bottleneck and fail over to scipy
-=======
 # Try to pull in bottleneck (a faster implementation of some numpy
 # functions) and default to scipy if this fails
->>>>>>> fc0e49c62829b4d03f8e5e2db706071347e1a83e
 try:
     from bottleneck import nanmedian, nanstd
 except ImportError:
@@ -246,12 +237,8 @@ class Noise:
            Fit only a single number. Otherwise fit spectral and spatial variations.
         """
 
-<<<<<<< HEAD
-        swapa = self.cube.filled_data[:].astype('=f')
-=======
         # POSSIBLE IMPROVEMENT - add iterative outlier rejection
         # here.
->>>>>>> fc0e49c62829b4d03f8e5e2db706071347e1a83e
         
         # Extract the data from the spectral cube object
         data = self.cube.get_filled_data().astype('=f')
@@ -314,9 +301,6 @@ class Noise:
         in place.
         """
 
-<<<<<<< HEAD
-        data = self.cube.filled_data[:].astype('=f')
-=======
         # POSSIBLE IMPROVEMENT: Separate out the smoothing functions
         # as generic operators on the estimate. They only need to be
         # in here if they are going to be used in the actual estimation
@@ -325,7 +309,6 @@ class Noise:
         data = self.cube.get_filled_data().astype('=f')
 
         # Estimate the noise
->>>>>>> fc0e49c62829b4d03f8e5e2db706071347e1a83e
         self.scalar_noise()
 
         # Initialize the spatial and spectral variations.
@@ -383,7 +366,7 @@ class Noise:
         assumption that the median absolute deviation is a rigorous method.
         """
 
-        data = self.cube.filled_data[:].astype('=f')
+        data = self.cube.get_filled_data().astype('=f')
         self.scale = nanstd(data)
         if self.spatial_norm is None:
             self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
@@ -462,15 +445,11 @@ class Noise:
         # Initialize a new shape map
         shape_map = np.zeros(self.cube.shape+(len(\
             self.distribution_shape),))
-<<<<<<< HEAD
-        data = self.cube.filled_data[:]
-=======
 
         # Get the data from the spectral cube object
         data = self.cube.get_filled_data()
 
         # Initialize an iterator over the cube
->>>>>>> fc0e49c62829b4d03f8e5e2db706071347e1a83e
         iterator = np.nditer(data,flags=['multi_index'])
         xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
                                      np.arange(-boxsize,boxsize),
@@ -510,19 +489,8 @@ class Noise:
         # POSSIBLE IMPROVEMENT: Some smoothing to get to a continuous
         # variation. Cubic or linear interpolation? Linear smoothing?
 
-<<<<<<< HEAD
-        shape_map = np.zeros(self.cube.shape+(len(\
-            self.distribution_shape),))
-        data = self.cube.filled_data[:]
-        iterator = np.nditer(data,flags=['multi_index'])
-        xoff,yoff,zoff = np.meshgrid(np.arange(-boxsize,boxsize),
-                                     np.arange(-boxsize,boxsize),
-                                     np.arange(-boxsize,boxsize),
-                                     indexing='ij')
-=======
         # Place the fit distribution into memory
         self.distribution_shape_map = shape_map
->>>>>>> fc0e49c62829b4d03f8e5e2db706071347e1a83e
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Manipulate the noise estimates
@@ -556,48 +524,19 @@ class Noise:
         for count in range(niter):
             if self.spatial_norm is not None:
                 noise = self.get_scale_cube()
-                snr = self.cube.filled_data[:]/noise
+                snr = self.cube.get_filled_data()/noise
             else:
-                snr = self.cube.filled_data[:]/self.scale
+                snr = self.cube.get_filled_data()/self.scale
             # Include negatives in the signal mask or not?
             newmask = SpectralCubeMask(np.abs(snr)<
                 sig_n_outliers(self.cube.size),self.cube.wcs)
-            self.cube = self.cube.with_mask(newmask)
+            self.cube = self.cube.apply_mask(newmask)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Visualization methods
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
 
-<<<<<<< HEAD
-
-    def cube_of_noise(self):
-        """
-        Generates a matched data set of pure noise with properties matching
-        the stated distribution.
-
-        """
-        if self.spatial_norm is None:
-            return self.distribution.rvs(*self.distribution_shape,
-                size=self.cube.shape)
-        else:
-            noise = np.random.randn(*self.cube.shape)
-            if self.beam is not None:
-            	kernel = self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
-                # I really don't think the sqrt(2) should be at the end
-                # of this line but it doesn't work without it??
-                rescale = np.sqrt((kernel.array/np.max(kernel.array)).sum())*\
-                          np.sqrt(2)
-                # Iterate convolution over plane (ugh)
-                for plane in np.arange(self.cube.shape[0]):
-                    noise[plane,:,:] = convolve_fft(noise[plane,:,:],\
-                		kernel, normalize_kernel=True)*rescale
-                noise = noise*self.get_scale_cube()
-                return SpectralCube(noise,self.cube.wcs)
-
-    def plot_noise(self,normalize=True):
-=======
     def plot_histogram(self,normalize=True):
->>>>>>> fc0e49c62829b4d03f8e5e2db706071347e1a83e
         """
         Makes a plot of the data distribution and the estimated
         parameters of the PDF.
@@ -621,7 +560,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            data = self.cube.filled_data[:].astype('=f')
+            data = self.cube.get_filled_data().astype('=f')
             scale = self.get_scale_cube()
             snr = data/scale
             plotdata = snr[np.isfinite(snr)].ravel()
