@@ -218,7 +218,6 @@ class Noise:
 
         negs = self.cube.flattened().value.astype('=f')
         negs = negs[negs<0]
-        print(len(negs))
         self.scale = nanmad(np.hstack([negs,-1*negs]), median_value=0.0)
         return
 
@@ -238,7 +237,8 @@ class Noise:
         # here.
         
         # Extract the data from the spectral cube object
-        data = self.cube.filled_data[:].value.astype('=f')
+        data = self.cube._get_filled_data(check_endian=True)
+        
         
         # Calculate the overall scale
         self.scale = nanstd(data)
@@ -303,7 +303,7 @@ class Noise:
         # in here if they are going to be used in the actual estimation
         
         # Access the data in the spectral cube
-        data = self.cube.filled_data[:].value.astype('=f')
+        data = self.cube._get_filled_data(check_endian=True)
 
         # Estimate the noise
         self.scalar_noise()
@@ -363,7 +363,7 @@ class Noise:
         assumption that the median absolute deviation is a rigorous method.
         """
 
-        data = self.cube.filled_data[:].value.astype('=f')
+        data = self.cube._get_filled_data(check_endian=True)
         self.scale = nanstd(data)
         if self.spatial_norm is None:
             self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
@@ -444,7 +444,7 @@ class Noise:
             self.distribution_shape),))
 
         # Get the data from the spectral cube object
-        data = self.cube.filled_data[:].value
+        data = self.cube._get_filled_data()
 
         # Initialize an iterator over the cube
         iterator = np.nditer(data,flags=['multi_index'])
@@ -521,9 +521,9 @@ class Noise:
         for count in range(niter):
             if self.spatial_norm is not None:
                 noise = self.get_scale_cube()
-                snr = self.cube.filled_data[:].value/noise
+                snr = self.cube._get_filled_data()/noise
             else:
-                snr = self.cube.filled_data[:].value/self.scale
+                snr = self.cube._get_filled_data().value/self.scale
             # Include negatives in the signal mask or not?
             newmask = SpectralCubeMask(np.abs(snr)<
                 sig_n_outliers(self.cube.size),self.cube.wcs)
@@ -557,7 +557,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            data = self.cube.filled_data[:].value.astype('=f')
+            data = self.cube._get_filled_data(check_endian=True)
             scale = self.get_scale_cube()
             snr = data/scale
             plotdata = snr[np.isfinite(snr)].ravel()
