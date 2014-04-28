@@ -1,3 +1,11 @@
+# GENERAL COMMENTARY: I think we want to go in the direction of better
+# modularity in the functionality and then a very few, very high-level
+# user-facing functions with a lot of flags to direct work flow.
+
+# GENERAL COMMENTARY: I worry about astropy depdendencies and
+# ease-of-use for our target audience. This fundamentally needs to be
+# usable by people trying to do clean masking.
+
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # Imports
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
