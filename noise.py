@@ -211,18 +211,14 @@ class Noise:
         Derive the scale of the noise distribution using only the 
         negative values in the array and the MAD()
         """
-        
-        # ISSUE: This seems wrong?!? You can't expect the mad of the
-        # negatives to give you the noise, can you? You need to
-        # reflect them.
 
         # POSSIBLE IMPROVEMENT: Why not have this be either (a) a
         # general thing with multiple methods exposed or (b) just
         # something that gets done as a subset of the 
 
-        negs = self.cube.flattened().astype('=f')
+        negs = self.cube.flattened().value.astype('=f')
         negs = negs[negs<0]
-        self.scale = nanmad(negs)
+        self.scale = nanmad(np.hstack([negs,-1*negs]), median_value=0.0)
         return
 
     def calculate_std(
@@ -306,7 +302,7 @@ class Noise:
         # in here if they are going to be used in the actual estimation
         
         # Access the data in the spectral cube
-        data = self.cube.filled_data[:].astype('=f')
+        data = self.cube._get_filled_data(check_endian=True)
 
         # Estimate the noise
         self.scalar_noise()
@@ -330,10 +326,10 @@ class Noise:
                 if spatial_smooth is not None:
                     self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
                         kernel_size=spatial_smooth)
-            if self.beam is not None:
-                self.spatial_norm = convolve_fft(self.spatial_norm, 
-                    self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                    interpolate_nan=True,normalize_kernel=True)
+                    if self.beam is not None:
+                        self.spatial_norm = convolve_fft(self.spatial_norm, 
+                                                         self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
+                                                         interpolate_nan=True,normalize_kernel=True)
             else:
                 self.spatial_norm = np.ones([data.shape[1],data.shape[2]])
             if not spectral_flat:
@@ -408,7 +404,7 @@ class Noise:
         the noise values.
         """
         self.distribution_shape = self.distribution.fit(\
-            self.cube.flattened())
+            self.cube.flattened().value)
         return
 
     def rolling_shape_fit(
@@ -580,7 +576,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            plotdata = self.cube.flattened()            
+            plotdata = self.cube.flattened().value            
 
             plt.hist(plotdata,bins=Nbins,log=True)
             plt.plot(xsamples,binwidth*self.cube.size*
@@ -640,16 +636,22 @@ def mad(data, sigma=True, axis=None):
     else:
         return mad*1.4826
 
-def nanmad(data, sigma=True, axis=None):
+def nanmad(data, sigma=True, axis=None, median_value=None):
     """
     Return the median absolute deviation.  Axis functionality adapted
     from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
     """
     if axis>0:
-        med = nanmedian(data.swapaxes(0,axis),axis=0)
+        if median_value is None:
+            med = nanmedian(data.swapaxes(0,axis),axis=0)
+        else:
+            med = median_value
         mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
     else:
-        med = nanmedian(data,axis=axis)
+        if median_value is None:
+            med = nanmedian(data,axis=axis)
+        else:
+            med = median_value
         mad = nanmedian(np.abs(data - med),axis=axis)
     if not sigma:
         return mad

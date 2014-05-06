@@ -182,7 +182,7 @@ class RadioMask(object):
     def independent_areas(self,struct=None):
         raise NotImplementedError()
 
-    def independent_cubes(self,struct=None):):
+    def independent_cubes(self,struct=None):
         raise NotImplementedError()
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
