@@ -22,7 +22,7 @@ from scipy.ndimage import label, find_objects
 # astropy
 
 # radio tools
-from spectral_cube import SpectralCube, SpectralCubeMask, read
+from spectral_cube import SpectralCube
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # BASE CLASS
