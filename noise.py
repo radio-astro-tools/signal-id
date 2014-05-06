@@ -327,10 +327,10 @@ class Noise:
                 if spatial_smooth is not None:
                     self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
                         kernel_size=spatial_smooth)
-            if self.beam is not None:
-                self.spatial_norm = convolve_fft(self.spatial_norm, 
-                    self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                    interpolate_nan=True,normalize_kernel=True)
+                    if self.beam is not None:
+                        self.spatial_norm = convolve_fft(self.spatial_norm, 
+                                                         self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
+                                                         interpolate_nan=True,normalize_kernel=True)
             else:
                 self.spatial_norm = np.ones([data.shape[1],data.shape[2]])
             if not spectral_flat:
@@ -527,7 +527,7 @@ class Noise:
             # Include negatives in the signal mask or not?
             newmask = SpectralCubeMask(np.abs(snr)<
                 sig_n_outliers(self.cube.size),self.cube.wcs)
-            self.cube = self.cube.apply_mask(newmask)
+            self.cube = self.cube.with_mask(newmask)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Visualization methods
