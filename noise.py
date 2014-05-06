@@ -30,7 +30,7 @@ import astropy.wcs
 from astropy.convolution import convolve_fft,convolve
 
 # Spectral cube object from radio-astro-tools
-from spectral_cube.spectral_cube import SpectralCubeMask,SpectralCube
+from spectral_cube import SpectralCubeMask,SpectralCube
 
 # Radio beam object from radio-astro-tools
 try:
@@ -241,7 +241,7 @@ class Noise:
         # here.
         
         # Extract the data from the spectral cube object
-        data = self.cube.get_filled_data().astype('=f')
+        data = self.cube.filled_data[:].astype('=f')
         
         # Calculate the overall scale
         self.scale = nanstd(data)
@@ -306,7 +306,7 @@ class Noise:
         # in here if they are going to be used in the actual estimation
         
         # Access the data in the spectral cube
-        data = self.cube.get_filled_data().astype('=f')
+        data = self.cube.filled_data[:].astype('=f')
 
         # Estimate the noise
         self.scalar_noise()
@@ -366,7 +366,7 @@ class Noise:
         assumption that the median absolute deviation is a rigorous method.
         """
 
-        data = self.cube.get_filled_data().astype('=f')
+        data = self.cube.filled_data[:].astype('=f')
         self.scale = nanstd(data)
         if self.spatial_norm is None:
             self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
@@ -447,7 +447,7 @@ class Noise:
             self.distribution_shape),))
 
         # Get the data from the spectral cube object
-        data = self.cube.get_filled_data()
+        data = self.cube.filled_data[:]
 
         # Initialize an iterator over the cube
         iterator = np.nditer(data,flags=['multi_index'])
@@ -524,13 +524,13 @@ class Noise:
         for count in range(niter):
             if self.spatial_norm is not None:
                 noise = self.get_scale_cube()
-                snr = self.cube.get_filled_data()/noise
+                snr = self.cube.filled_data[:]/noise
             else:
-                snr = self.cube.get_filled_data()/self.scale
+                snr = self.cube.filled_data[:]/self.scale
             # Include negatives in the signal mask or not?
             newmask = SpectralCubeMask(np.abs(snr)<
                 sig_n_outliers(self.cube.size),self.cube.wcs)
-            self.cube = self.cube.apply_mask(newmask)
+            self.cube = self.cube.with_mask(newmask)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Visualization methods
@@ -560,7 +560,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            data = self.cube.get_filled_data().astype('=f')
+            data = self.cube.filled_data[:].astype('=f')
             scale = self.get_scale_cube()
             snr = data/scale
             plotdata = snr[np.isfinite(snr)].ravel()
