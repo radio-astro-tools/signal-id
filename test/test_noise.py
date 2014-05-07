@@ -17,9 +17,9 @@ def test_scalegen():
     data = np.random.randn(30,40,50)
     mask = np.ones((30,40,50),dtype='bool')
     h = fits.header.Header.fromstring(HEADER_STR)
-    h['NAXIS1'] = 30
+    h['NAXIS1'] = 50
     h['NAXIS2'] = 40
-    h['NAXIS3'] = 50
+    h['NAXIS3'] = 30
     h['NAXIS4'] = 1
     cube = SpectralCube(data,wcs.WCS(h),mask=mask)
     noiseobj = noise.Noise(cube)

@@ -30,7 +30,7 @@ import astropy.wcs
 from astropy.convolution import convolve_fft,convolve
 
 # Spectral cube object from radio-astro-tools
-from spectral_cube import SpectralCube
+from spectral_cube import SpectralCube,BooleanArrayMask
 
 # Radio beam object from radio-astro-tools
 try:
@@ -371,7 +371,7 @@ class Noise:
             scale = self.get_scale_cube()
             snr = data/scale
             self.spatial_norm = nanstd(snr,axis=0)*self.spatial_norm
-            if beam is not None:
+            if self.beam is not None:
                 self.spatial_norm = convolve_fft(self.spatial_norm, 
                     self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
                     interpolate_nan=True,normalize_kernel=True)
@@ -524,7 +524,7 @@ class Noise:
             else:
                 snr = self.cube.filled_data[:]/self.scale
             # Include negatives in the signal mask or not?
-            newmask = (np.abs(snr)<sig_n_outliers(self.cube.size),self.cube.wcs)
+            newmask = BooleanArrayMask(np.abs(snr)<sig_n_outliers(self.cube.size),self.cube.wcs)
             self.cube = self.cube.with_mask(newmask)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
