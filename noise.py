@@ -145,7 +145,9 @@ class Noise:
 
         # Fit the data
         if scale is None:
-            self.scalar_noise() # [1] is the std. of a Gaussian
+            self.calculate_scale() # [1] is the std. of a Gaussian
+            self.spatial_norm = np.ones([self.cube.shape[1],self.cube.shape[2]])
+            self.spectral_norm = np.ones((self.cube.shape[0]))
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Expose the noise in various ways
@@ -187,7 +189,7 @@ class Noise:
         Return a signal-to-noise cube.
         """
 
-        return self.data/self.get_scale_cube()
+        return self.cube.filled_data[:].value/self.get_scale_cube()
 
         if as_prob:
             raise NotImplementedError()
@@ -232,7 +234,7 @@ class Noise:
                 medval=0.0,
                 nans=True)
         if method == "STD":
-            data = self.cube.filled_data[:].astype('=f')        
+            data = self.cube.filled_data[:].value.astype('=f')        
             self.scale = nanstd(data)
 
         self.distribution_shape=(0,self.scale)
@@ -248,15 +250,15 @@ class Noise:
 
         # This approach is not defined for images, though other
         # approaches could work
-        if self.data.ndim == 2:
+        if self.cube.ndim == 2:
             return
 
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = data/self.get_scale_cube()
+            snr = self.cube.filled_data[:].value/self.get_scale_cube()
         else:
-            snr = data/self.scale
+            snr = self.cube.filled_data[:].value/self.scale
 
         # Switch estimate on methodology
         if method == "MAD":
@@ -285,15 +287,15 @@ class Noise:
         """
 
         # Not defined for images
-        if self.data.ndim == 2:
+        if self.cube.ndim == 2:
             return
 
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = data/self.get_scale_cube()
+            snr = self.cube.filled_data[:].value/self.get_scale_cube()
         else:
-            snr = data/self.spatial/self.scale
+            snr = self.cube.filled_data[:].value/self.spatial/self.scale
 
         # Reshape the working data into a two-d array with the spatial
         # dimensions collapsed together
@@ -359,7 +361,7 @@ class Noise:
     def estimate_noise(
             self,
             method="MAD",
-            iter=1,
+            niter=1,
             spatial_flat=False,
             spatial_smooth=None,
             spectral_flat=False,
@@ -369,9 +371,9 @@ class Noise:
         """
 
         # Calculate the overall scale
-        calculate_scale(method=method)
-        self.spatial_norm = np.ones([data.shape[1],data.shape[2]])
-        self.spectral_norm = np.ones((data.shape[0]))
+        self.calculate_scale(method=method)
+        self.spatial_norm = np.ones([self.cube.shape[1],self.cube.shape[2]])
+        self.spectral_norm = np.ones((self.cube.shape[0]))
 
         # Iterate over spatial and spectral variations
         for count in range(niter):
@@ -407,9 +409,9 @@ class Noise:
         for count in range(niter):
             if self.spatial_norm is not None:
                 noise = self.get_scale_cube()
-                snr = self.cube.filled_data[:]/noise
+                snr = self.cube.filled_data[:].value/noise
             else:
-                snr = self.cube.filled_data[:]/self.scale
+                snr = self.cube.filled_data[:].value/self.scale
             # Include negatives in the signal mask or not?
             newmask = BooleanArrayMask(np.abs(snr)<
                 sig_n_outliers(self.cube.size),self.cube.wcs)
@@ -443,7 +445,7 @@ class Noise:
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            data = self.cube.filled_data[:].astype('=f')
+            data = self.cube.filled_data[:].value.astype('=f')
             scale = self.get_scale_cube()
             snr = data/scale
             plotdata = snr[np.isfinite(snr)].ravel()
@@ -640,7 +642,7 @@ def get_pixel_scales(mywcs):
             self.distribution_shape),))
 
         # Get the data from the spectral cube object
-        data = self.cube.filled_data[:]
+        data = self.cube.filled_data[:].value
 
         # Initialize an iterator over the cube
         iterator = np.nditer(data,flags=['multi_index'])
