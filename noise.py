@@ -454,6 +454,7 @@ class Noise:
             xmax = self.distribution.ppf(1-1./self.cube.size,0,1)
             xsamples = np.linspace(xmin,xmax,100)
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
+            print Nbins
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
             data = self.cube.filled_data[:].value.astype('=f')
@@ -474,6 +475,7 @@ class Noise:
                                          self.distribution_shape)
             xsamples = np.linspace(xmin,xmax,100)
             Nbins = np.min([int(np.sqrt(self.cube.size)),100])
+            print Nbins
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
             plotdata = self.cube.flattened().value            
@@ -499,6 +501,7 @@ class Noise:
             return
 
         channel = np.arange(len(self.spectral_norm))
+        plt.clf()
         plt.plot(channel, self.spectral_norm)
 
     def plot_map(self):
@@ -514,91 +517,8 @@ class Noise:
         except ImportError:
             return
 
-        plt.imshow(channel, self.spatial_norm, origin="lower")
-
-# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-# EXTERNAL FUNCTIONS STILL INTEGRAL TO NOISE
-# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-
-def mad(
-        data, 
-        sigma=True, 
-        axis=None,
-        force=False,
-        medval=0.0,
-        nans=False):
-    """Return the median absolute deviation (or the absolute deviation
-    about a fixed value - default zero - if force is set to True). By
-    default returns the equivalent sigma. Axis functionality adapted
-    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
-    Flips nans to True (default false) to use with nans.
-    """
-    if axis>0:
-        if force:
-            med = medval
-        else:
-            if nans:
-                med = nanmedian(data.swapaxes(0,axis),axis=0)
-            else:
-                med = np.median(data.swapaxes(0,axis),axis=0)
-        if nans:
-            mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
-        else:
-            mad = np.median(np.abs(data.swapaxes(0,axis) - med),axis=0)
-    else:
-        if force:
-            med = medval
-        else:
-            med = np.median(data,axis=axis)
-        mad = np.median(np.abs(data - med),axis=axis)
-    if sigma==False:
-        return mad
-    else:
-        return mad*1.4826
-
-# COMMENTARY: Deprecate or incorporate (axis functionality would be
-# ideal)
-
-def sigma_rob(
-        data, 
-        iterations=1, 
-        thresh=3.0):
-    """
-    Iterative m.a.d. based sigma with positive outlier rejection.
-    """
-    noise = mad(data)
-    for i in range(iterations):
-        ind = (data <= thresh*noise).nonzero()
-        noise = mad(data[ind])
-    return noise
-
-def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
-    """
-    Return the sigma needed to expect n (default 1) outliers given
-    n_data points.
-    """
-    perc = float(n_out)/float(n_data)
-    if pos_only == False:
-        perc *= 2.0
-    return abs(ss.norm.ppf(perc))
-
-# COMMENTARY: The above two are good here, this should either go to a
-# utils directory or move to the spectral_cube object (the latter
-# preferrably).
-
-def get_pixel_scales(mywcs):
-    """Extract a pixel scale (this assumes square pixels) from a wcs.
-    """
-    # borrowed from @keflavich who borrowed from aplpy
-    
-    mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
-    cdelt = np.array(mywcs.wcs.get_cdelt())
-    pc = np.array(mywcs.wcs.get_pc())
-    # I too like to live dangerously:
-    scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
-     cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
-    return abs(scale[0])
-
+        plt.clf()
+        plt.imshow(self.spatial_norm, origin="lower")
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Parallel generic scipy.stats approach
@@ -697,3 +617,88 @@ def get_pixel_scales(mywcs):
 
         # Place the fit distribution into memory
         self.distribution_shape_map = shape_map
+
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+# EXTERNAL FUNCTIONS STILL INTEGRAL TO NOISE
+# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
+def mad(
+        data, 
+        sigma=True, 
+        axis=None,
+        force=False,
+        medval=0.0,
+        nans=False):
+    """Return the median absolute deviation (or the absolute deviation
+    about a fixed value - default zero - if force is set to True). By
+    default returns the equivalent sigma. Axis functionality adapted
+    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
+    Flips nans to True (default false) to use with nans.
+    """
+    if axis>0:
+        if force:
+            med = medval
+        else:
+            if nans:
+                med = nanmedian(data.swapaxes(0,axis),axis=0)
+            else:
+                med = np.median(data.swapaxes(0,axis),axis=0)
+        if nans:
+            mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
+        else:
+            mad = np.median(np.abs(data.swapaxes(0,axis) - med),axis=0)
+    else:
+        if force:
+            med = medval
+        else:
+            med = np.median(data,axis=axis)
+        mad = np.median(np.abs(data - med),axis=axis)
+    if sigma==False:
+        return mad
+    else:
+        return mad*1.4826
+
+# COMMENTARY: Deprecate or incorporate (axis functionality would be
+# ideal)
+
+def sigma_rob(
+        data, 
+        iterations=1, 
+        thresh=3.0):
+    """
+    Iterative m.a.d. based sigma with positive outlier rejection.
+    """
+    noise = mad(data)
+    for i in range(iterations):
+        ind = (data <= thresh*noise).nonzero()
+        noise = mad(data[ind])
+    return noise
+
+def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
+    """
+    Return the sigma needed to expect n (default 1) outliers given
+    n_data points.
+    """
+    perc = float(n_out)/float(n_data)
+    if pos_only == False:
+        perc *= 2.0
+    return abs(ss.norm.ppf(perc))
+
+# COMMENTARY: The above two are good here, this should either go to a
+# utils directory or move to the spectral_cube object (the latter
+# preferrably).
+
+def get_pixel_scales(mywcs):
+    """Extract a pixel scale (this assumes square pixels) from a wcs.
+    """
+    # borrowed from @keflavich who borrowed from aplpy
+    
+    mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
+    cdelt = np.array(mywcs.wcs.get_cdelt())
+    pc = np.array(mywcs.wcs.get_pc())
+    # I too like to live dangerously:
+    scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
+     cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
+    return abs(scale[0])
+
+
