@@ -299,11 +299,12 @@ class Noise:
 
         # Reshape the working data into a two-d array with the spatial
         # dimensions collapsed together
-        snr.reshape((data.shape[0], data.shape[1]*data.shape[2]))
+        new_shape = (self.cube.shape[0], self.cube.shape[1]*self.cube.shape[2])
+        snr = snr.reshape(new_shape)
 
         # Switch on calculation methodology
         if method == "MAD":
-            estimate = mad(snr,axis=0,nans=True)
+            estimate = mad(snr,axis=1,nans=True)
         if method == "STD":
             estimate = nanstd(snr, axis=1)
 
@@ -330,6 +331,7 @@ class Noise:
         Smooth the noise estimate in the spatial dimension. Two
         components: median smoothing and convolving with the beam.
         """
+        
         # Manually median filter (square box)
         if kernel is not None:
             self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
@@ -365,24 +367,33 @@ class Noise:
             spatial_flat=False,
             spatial_smooth=None,
             spectral_flat=False,
-            spectral_smooth=None):
+            spectral_smooth=None,
+            verbose=False):
         """
         High level noise estimation procedure.
         """
 
         # Calculate the overall scale
+        if verbose:
+            print "Calculating overall scale."
         self.calculate_scale(method=method)
         self.spatial_norm = np.ones([self.cube.shape[1],self.cube.shape[2]])
         self.spectral_norm = np.ones((self.cube.shape[0]))
 
         # Iterate over spatial and spectral variations
+        if verbose:
+            print "Iterating to fir spatial and spectral variation."
         for count in range(niter):
+            print "Spatial"
             if not spatial_flat:
                 self.calculate_spatial(method=method, cumul=True)
-            if spatial_smooth is not None or self.beam is not None:
-                self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
+            print "Smooth"
+            #if spatial_smooth is not None or self.beam is not None:
+            #    self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
+            print "Spectral"
             if not spectral_flat:
                 self.calculate_spectral(method=method, cumul=True)
+            print "Smooth"
             if spectral_smooth is not None:
                 self.spectral_smooth(kernel=spectral_smooth)
 
