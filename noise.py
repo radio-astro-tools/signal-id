@@ -334,13 +334,19 @@ class Noise:
         
         # Manually median filter (square box)
         if kernel is not None:
+            print "Median filtering"
             self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
                                                kernel_size=kernel)
 
         # Convolve with the beam (if it's known)
-        if convbeam and self.beam is not None:
+        if convbeam and self.beam is not None:     
+            #return
+            pix_scales = get_pixel_scales(self.cube.wcs)
+            print "Making kernel"
+            kernel = self.beam.as_kernel(pix_scales)
+            print "Made kernel"
             self.spatial_norm = convolve_fft(self.spatial_norm, 
-                                             self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
+                                             kernel.array,
                                              interpolate_nan=True,normalize_kernel=True)
         return
 
@@ -382,14 +388,14 @@ class Noise:
 
         # Iterate over spatial and spectral variations
         if verbose:
-            print "Iterating to fir spatial and spectral variation."
+            print "Iterating to find spatial and spectral variation."
         for count in range(niter):
             print "Spatial"
             if not spatial_flat:
                 self.calculate_spatial(method=method, cumul=True)
             print "Smooth"
-            #if spatial_smooth is not None or self.beam is not None:
-            #    self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
+            if spatial_smooth is not None or self.beam is not None:
+                self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
             print "Spectral"
             if not spectral_flat:
                 self.calculate_spectral(method=method, cumul=True)
@@ -693,12 +699,28 @@ def get_pixel_scales(mywcs):
     """
     # borrowed from @keflavich who borrowed from aplpy
     
-    mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
-    cdelt = np.array(mywcs.wcs.get_cdelt())
-    pc = np.array(mywcs.wcs.get_pc())
+    # THIS NEEDS HELP!
+
+    pix00 = mywcs.wcs_pix2world(0,0,0,1)
+    pix10 = mywcs.wcs_pix2world(1,0,0,1)
+    pix01 = mywcs.wcs_pix2world(0,1,0,1)
+    
+    scale1 = ((pix00[0] - pix01[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
+             (pix00[1] - pix01[1])**2)**0.5
+    scale2 = ((pix00[0] - pix10[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
+             (pix00[1] - pix10[1])**2)**0.5
+
+    if abs((scale1 - scale2)/scale1) > 0.1:
+        print "Pixels may not be square!"
+    
+    return scale1
+
+    #mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
+    #cdelt = np.array(mywcs.wcs.get_cdelt())
+    #pc = np.array(mywcs.wcs.get_pc())
     # I too like to live dangerously:
-    scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
-     cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
-    return abs(scale[0])
+    #scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
+    # cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
+    #return abs(scale[0])
 
 
