@@ -30,7 +30,7 @@ import astropy.wcs
 from astropy.convolution import convolve_fft,convolve
 
 # Spectral cube object from radio-astro-tools
-from spectral_cube import BooleanArrayMask,SpectralCube
+from spectral_cube import SpectralCube,BooleanArrayMask
 
 # Radio beam object from radio-astro-tools
 try:
@@ -338,16 +338,35 @@ class Noise:
             self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
                                                kernel_size=kernel)
 
-        # Convolve with the beam (if it's known)
-        if convbeam and self.beam is not None:     
-            #return
-            pix_scales = get_pixel_scales(self.cube.wcs)
-            print "Making kernel"
-            kernel = self.beam.as_kernel(pix_scales)
-            print "Made kernel"
-            self.spatial_norm = convolve_fft(self.spatial_norm, 
-                                             kernel.array,
-                                             interpolate_nan=True,normalize_kernel=True)
+        data = self.cube.filled_data[:].astype('=f')
+        self.scale = nanstd(data)
+        if self.spatial_norm is None:
+            self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
+            self.spectral_norm = np.ones((data.shape[0]))
+        for count in range(niter):
+            scale = self.get_scale_cube()
+            snr = data/scale
+            self.spatial_norm = nanstd(snr,axis=0)*self.spatial_norm
+            if self.beam is not None:
+                self.spatial_norm = convolve_fft(self.spatial_norm, 
+                    self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
+                    interpolate_nan=True,normalize_kernel=True)
+            if spatial_smooth is not None:
+                self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
+                    kernel_size=spatial_smooth)
+
+            snr = data/self.get_scale_cube()
+            self.spectral_norm = nanstd(snr.reshape((snr.shape[0],
+                                                     snr.shape[1]*
+                                                     snr.shape[2])),
+                                        axis=1)*self.spectral_norm
+            if spectral_smooth is not None:
+                self.spectral_norm = ssig.medfilt(self.spectral_norm,
+                    kernel_size=spectral_smooth)
+        self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
+        self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
+        self.spatial_norm[~self.spatial_footprint]=np.nan
+        self.distribution_shape=(0,self.scale)    
         return
 
     def spectral_smooth(
@@ -430,8 +449,7 @@ class Noise:
             else:
                 snr = self.cube.filled_data[:].value/self.scale
             # Include negatives in the signal mask or not?
-            newmask = BooleanArrayMask(np.abs(snr)<
-                sig_n_outliers(self.cube.size),self.cube.wcs)
+            newmask = BooleanArrayMask(np.abs(snr)<sig_n_outliers(self.cube.size),self.cube.wcs)
             self.cube = self.cube.with_mask(newmask)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
