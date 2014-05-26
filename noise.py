@@ -1,10 +1,10 @@
-# GENERAL COMMENTARY: I think we want to go in the direction of better
-# modularity in the functionality and then a very few, very high-level
-# user-facing functions with a lot of flags to direct work flow.
-
 # GENERAL COMMENTARY: I worry about astropy depdendencies and
 # ease-of-use for our target audience. This fundamentally needs to be
 # usable by people trying to do clean masking.
+
+# GENERAL COMMENTARY: Next high nail seems like signal masking.
+
+# ADD TIME AND COMMENTARY/VERBOSE
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # Imports
@@ -30,7 +30,7 @@ import astropy.wcs
 from astropy.convolution import convolve_fft,convolve
 
 # Spectral cube object from radio-astro-tools
-from spectral_cube import SpectralCube
+from spectral_cube import BooleanArrayMask,SpectralCube
 
 # Radio beam object from radio-astro-tools
 try:
@@ -82,10 +82,12 @@ class Noise:
     # Then the noise a a position (x,y,z) is:
     # scale * spectral_norm[z] * spatial_norm[y,x]
 
-    # This is a two-d mask indicating where we have data to measure the spatial noise
+    # This is a two-d mask indicating where we have data to measure
+    # the spatial noise
     spatial_footprint = None
     
-    # This is a one-d mask indicating where we have data to measure the spectral noise
+    # This is a one-d mask indicating where we have data to measure
+    # the spectral noise
     spectral_footprint = None
 
     # .............................
@@ -138,11 +140,14 @@ class Noise:
 
         # Default to a normal distribution
         self.distribution = ss.norm
+        
+        # SUGGESTION: calculate on initialization?
 
         # Fit the data
         if scale is None:
-            self.calculate_fit()
-            self.scalar_noise() # [1] is the std. of a Gaussian
+            self.calculate_scale() # [1] is the std. of a Gaussian
+            self.spatial_norm = np.ones([self.cube.shape[1],self.cube.shape[2]])
+            self.spectral_norm = np.ones((self.cube.shape[0]))
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Expose the noise in various ways
@@ -161,116 +166,252 @@ class Noise:
 
     def cube_of_noise(self):
         """
-        Generates a data cube of randomly generated noise with properties matching
-        the measured distribution.
+        Generates a data cube of randomly generated noise with properties
+        matching the measured distribution.
         """        
 
-        # ISSUE - this currently only uses the beam if there is a
-        # spatial noise map. That's not right. You always want to use
-        # the beam if you have it.
-
-        if self.spatial_norm is None:
-            return self.distribution.rvs(
-                *self.distribution_shape,
-                size=self.cube.shape)
-        else:
-            noise = np.random.randn(*self.cube.shape)
-            if self.beam is not None:
-                self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
-                # Iterate convolution over plane (ugh)
-                for plane in np.arange(self.cube.shape[0]):
-                    noise[plane,:,:] = convolve_fft(noise[plane,:,:],
-                        self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                        normalize_kernel=True)
-            return noise * self.get_scale_cube()
+        noise = np.random.randn(*self.cube.shape)
+        if self.beam is not None:
+            beam = self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
+            # Iterate convolution over plane (ugh)
+            for plane in np.arange(self.cube.shape[0]):
+                noise[plane,:,:] = convolve_fft(noise[plane,:,:],
+                                                beam,
+                                                normalize_kernel=True)
+        
+        return noise * self.get_scale_cube()
+            
+        # Eventually, we want to use self.distribution.rvs for arbitrary distributions
 
     def snr(self,
             as_prob=False):
         """
         Return a signal-to-noise cube.
         """
-        raise NotImplementedError()
 
-        # Holds the signal to noise ratio.
-        # SNR[x,y,z] = Data[x,y,z] / (scale*spectral_norm[z]*spatial_norm[x,y])
-        # snr = None
+        return self.cube.filled_data[:].value/self.get_scale_cube()
+
+        if as_prob:
+            raise NotImplementedError()
+
+    def from_file(self,
+                infile=None):
+        """
+        Read noise fit results from file.
+        """
+
+        # Parse a cube as a scale cube, rading twod image and spectra
+
+        raise NotImplementedError()
 
     def to_file(self,
                 outfile=None):
         """
         Write noise fit results to file.
         """
+
+        # Dump the scale cube?
+
         raise NotImplementedError()
                 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Generate noise estimate methods
+    # Generate noise estimates
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
 
-    def scalar_noise(self):
+    def calculate_scale(
+            self,
+            method="MAD"):
         """
         Derive the scale of the noise distribution using only the 
         negative values in the array and the MAD()
         """
+        if method == "MAD":
+            negs = self.cube.flattened().value.astype('=f')
+            negs = negs[negs<0]
+            self.scale = mad(
+                negs, 
+                force=True, 
+                medval=0.0,
+                nans=True)
+        if method == "STD":
+            data = self.cube.filled_data[:].value.astype('=f')        
+            self.scale = nanstd(data)
 
-        # POSSIBLE IMPROVEMENT: Why not have this be either (a) a
-        # general thing with multiple methods exposed or (b) just
-        # something that gets done as a subset of the 
-
-        negs = self.cube.flattened().value.astype('=f')
-        negs = negs[negs<0]
-        self.scale = nanmad(np.hstack([negs,-1*negs]), median_value=0.0)
+        self.distribution_shape=(0,self.scale)
         return
 
-    def calculate_std(
+    def calculate_spatial(
             self,
-            scalar=False):
+            method="MAD",
+            cumul=False):
         """
-        Calculates the naive values for the scale and norms under the
-        assumption that the standard deviation is a rigorous method.
-        
-        Parameters: 
-        scalar : boolean (default False)
-           Fit only a single number. Otherwise fit spectral and spatial variations.
+        Calculate spatial variations.
         """
 
-        # POSSIBLE IMPROVEMENT - add iterative outlier rejection
-        # here.
-        
-        # Extract the data from the spectral cube object
-        data = self.cube.filled_data[:].astype('=f')
-        
-        # Calculate the overall scale
-        self.scale = nanstd(data)
-        
-        # Return if fed an image and not a cube
-        if self.data.ndim == 2 or scalar == True:
+        # This approach is not defined for images, though other
+        # approaches could work
+        if self.cube.ndim == 2:
             return
 
-        # Calculate the spatial variations after removing the
-        # overall scaling
-        self.spatial_norm = nanstd(data,axis=0)/self.scale
-        
-        # Calculate the spectral variations after removing both
-        # the overall and spatial variations. Do this by
-        # flattening into a two-d array with the two image
-        # dimensions stacked together.
-        self.spectral_norm = nanstd(
-            (data/self.spatial_norm/self.scale).reshape((data.shape[0],
-                                                         data.shape[1]*
-                                                         data.shape[2])), axis=1)
+        # There are two approaches: iterate on top of the current
+        # noise estimate or generate a new estimate
+        if cumul:
+            snr = self.cube.filled_data[:].value/self.get_scale_cube()
+        else:
+            snr = self.cube.filled_data[:].value/self.scale
 
+        # Switch estimate on methodology
+        if method == "MAD":
+            estimate = mad(snr,axis=0,nans=True)
+
+        if method == "STD":
+            estimate = nanstd(snr,axis=0)
+
+        # If we are doing a cumulative calculation then append the estimate
+        if cumul:
+            self.spatial_norm = estimate*self.spatial_norm
+        else:
+            self.spatial_norm = estimate
+
+        # Enforce the footprint of viable data and set lingering not-a-numbers to 1
+        self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
+        self.spatial_norm[~self.spatial_footprint]=np.nan
+        return
+        
+    def calculate_spectral(
+            self,
+            method="MAD",
+            cumul=False):
+        """
+        Calculate spectral variations.
+        """
+
+        # Not defined for images
+        if self.cube.ndim == 2:
+            return
+
+        # There are two approaches: iterate on top of the current
+        # noise estimate or generate a new estimate
+        if cumul:
+            snr = self.cube.filled_data[:].value/self.get_scale_cube()
+        else:
+            snr = self.cube.filled_data[:].value/self.spatial/self.scale
+
+        # Reshape the working data into a two-d array with the spatial
+        # dimensions collapsed together
+        new_shape = (self.cube.shape[0], self.cube.shape[1]*self.cube.shape[2])
+        snr = snr.reshape(new_shape)
+
+        # Switch on calculation methodology
+        if method == "MAD":
+            estimate = mad(snr,axis=1,nans=True)
+        if method == "STD":
+            estimate = nanstd(snr, axis=1)
+
+        # If we are doing a cumulative calculation then append the estimate
+        if cumul:
+            self.spectral_norm = estimate*self.spectral_norm
+        else:
+            self.spectral_norm = estimate
+
+        # Set channels where the estimate has failed to 1 (the scalar noise)
+        self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
         return
 
-    def calculate_mad(
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Manipulate noise estimates
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+
+    def spatial_smooth(
             self,
-            niter=1,
-            spatial_smooth=None,
-            spectral_smooth=None,
-            spatial_flat=False,
-            spectral_flat=False):
+            kernel=None,
+            convbeam=True,
+            ):
         """
-        Calculates the naive values for the scale and norms under the
-        assumption that the median absolute deviation is a rigorous method.
+        Smooth the noise estimate in the spatial dimension. Two
+        components: median smoothing and convolving with the beam.
+        """
+        
+        # Manually median filter (square box)
+        if kernel is not None:
+            print "Median filtering"
+            self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
+                                               kernel_size=kernel)
+
+        # Convolve with the beam (if it's known)
+        if convbeam and self.beam is not None:     
+            #return
+            pix_scales = get_pixel_scales(self.cube.wcs)
+            print "Making kernel"
+            kernel = self.beam.as_kernel(pix_scales)
+            print "Made kernel"
+            self.spatial_norm = convolve_fft(self.spatial_norm, 
+                                             kernel.array,
+                                             interpolate_nan=True,normalize_kernel=True)
+        return
+
+    def spectral_smooth(
+            self,
+            kernel=None
+            ):
+        """
+        Median smooth the noise estimate along the spectral dimension.
+        """
+        # Manually median filter
+        self.spectral_norm = ssig.medfilt(self.spectral_norm,
+                                          kernel_size=kernel)
+        return
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # High level exposure for full estimation
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+    def estimate_noise(
+            self,
+            method="MAD",
+            niter=1,
+            spatial_flat=False,
+            spatial_smooth=None,
+            spectral_flat=False,
+            spectral_smooth=None,
+            verbose=False):
+        """
+        High level noise estimation procedure.
+        """
+
+        # Calculate the overall scale
+        if verbose:
+            print "Calculating overall scale."
+        self.calculate_scale(method=method)
+        self.spatial_norm = np.ones([self.cube.shape[1],self.cube.shape[2]])
+        self.spectral_norm = np.ones((self.cube.shape[0]))
+
+        # Iterate over spatial and spectral variations
+        if verbose:
+            print "Iterating to find spatial and spectral variation."
+        for count in range(niter):
+            print "Spatial"
+            if not spatial_flat:
+                self.calculate_spatial(method=method, cumul=True)
+            print "Smooth"
+            if spatial_smooth is not None or self.beam is not None:
+                self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
+            print "Spectral"
+            if not spectral_flat:
+                self.calculate_spectral(method=method, cumul=True)
+            print "Smooth"
+            if spectral_smooth is not None:
+                self.spectral_smooth(kernel=spectral_smooth)
+
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Interface with signal
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+    def mask_out_signal(self,niter=1):
+        """
+        Sets the mask property of the SpectralCube associated with the noise object
+        to exclude the noise through a (iterative) application of the Chauvenet 
+        rejection criterion (i.e., mask out all points outside of +/- N sigma of zero).
 
         Parameters
         ----------
@@ -278,124 +419,118 @@ class Noise:
             Number of iterations used in estimating the separate 
             components of the spatial and spectral noise variations.
             Default=1
-        spatial_smooth : number
-            Number of pixels used in spatially smoothing the normalization for the 
-            nosie map (via a 2D median filter)
-        spectral_smooth : number
-            Number of pixels used in spectral smoothing the normalization for the 
-            nosie map (via a 1D median filter)
-        spatial_flat : boolean
-            Assumes there is no spatial variation in the noise pattern.  
-            Default = False
-        spectral_flat : boolean
-            Assumes no spectral variation in the noise pattern.
-            Default=false
-
-        Returns
-        -------
-        None : updates Noise.spatial_norm, Noise.spectral_norm and Noise.scale 
-        in place.
         """
 
-        # POSSIBLE IMPROVEMENT: Separate out the smoothing functions
-        # as generic operators on the estimate. They only need to be
-        # in here if they are going to be used in the actual estimation
-        
-        # Access the data in the spectral cube
-        data = self.cube._get_filled_data(check_endian=True)
-
-        # Estimate the noise
-        self.scalar_noise()
-
-        # Initialize the spatial and spectral variations.
-        if self.spatial_norm is None:
-            self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
-            self.spectral_norm = np.ones((data.shape[0]))
-
-        # ISSUE: Not obvious what this wants to do right now - why
-        # iterate if you lose memory of the previous iterations each
-        # time? Presumably the idea is some cumulative filtering or
-        # outlier rejection? If it's just smoothing, move it out to
-        # separate functions to operate on the noise. I'm going to
-        # edit this.
+        # This needs reworking but is close.
 
         for count in range(niter):
-            if not spatial_flat:
-                snr = data/self.get_scale_cube()
-                self.spatial_norm = nanmad(snr,axis=0)*self.spatial_norm
-                if spatial_smooth is not None:
-                    self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
-                        kernel_size=spatial_smooth)
-                    if self.beam is not None:
-                        self.spatial_norm = convolve_fft(self.spatial_norm, 
-                                                         self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                                                         interpolate_nan=True,normalize_kernel=True)
+            if self.spatial_norm is not None:
+                noise = self.get_scale_cube()
+                snr = self.cube.filled_data[:].value/noise
             else:
-                self.spatial_norm = np.ones([data.shape[1],data.shape[2]])
-            if not spectral_flat:
-                snr = data/self.get_scale_cube()
-                self.spectral_norm = nanmad(snr.reshape((snr.shape[0],
-                                                         snr.shape[1]*
-                                                         snr.shape[2])),
-                                            axis=1)*self.spectral_norm
-                if spectral_smooth is not None:
-                    self.spectral_norm = ssig.medfilt(self.spectral_norm,
-                        kernel_size=spectral_smooth)
-            else:
-                self.spectral_norm = np.ones((data.shape[0]))
+                snr = self.cube.filled_data[:].value/self.scale
+            # Include negatives in the signal mask or not?
+            newmask = BooleanArrayMask(np.abs(snr)<
+                sig_n_outliers(self.cube.size),self.cube.wcs)
+            self.cube = self.cube.with_mask(newmask)
 
-        # Cleanup - replace the variations with "1" (i.e., revert to
-        # the average noise) wherever they end up not defined and
-        # blank the noise estimates outside the footprint defined by
-        # the valid data.
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    # Visualization methods
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
 
-        self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
-        self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
-        self.spatial_norm[~self.spatial_footprint]=np.nan
-        self.distribution_shape=(0,self.scale)
-
-        return
-
-    def calculate_std(self,niter=1,spatial_smooth=None,spectral_smooth=None):
+    def plot_histogram(self,normalize=True):
         """
-        Calculates the naive values for the scale and norms under the
-        assumption that the median absolute deviation is a rigorous method.
+        Makes a plot of the data distribution and the estimated
+        parameters of the PDF.
+
+        Parameters
+        ----------
+        normalize : Normalize the plot by the spatially and 
+        spectrally varying noise scale to cast the plot in terms of 
+        signal-to-noise ratio. Default: True
         """
 
-        data = self.cube.filled_data[:].astype('=f')
-        self.scale = nanstd(data)
-        if self.spatial_norm is None:
-            self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
-            self.spectral_norm = np.ones((data.shape[0]))
-        for count in range(niter):
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return
+
+        if normalize:
+            xmin = self.distribution.ppf(1./self.cube.size,0,1)
+            xmax = self.distribution.ppf(1-1./self.cube.size,0,1)
+            xsamples = np.linspace(xmin,xmax,100)
+            Nbins = np.min([int(np.sqrt(self.cube.size)),100])
+            binwidth = (xmax-xmin)/Nbins
+            plt.xlim(xmin,xmax)
+            data = self.cube.filled_data[:].value.astype('=f')
             scale = self.get_scale_cube()
             snr = data/scale
-            self.spatial_norm = nanstd(snr,axis=0)*self.spatial_norm
-            if beam is not None:
-                self.spatial_norm = convolve_fft(self.spatial_norm, 
-                    self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                    interpolate_nan=True,normalize_kernel=True)
-            if spatial_smooth is not None:
-                self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
-                    kernel_size=spatial_smooth)
+            plotdata = snr[np.isfinite(snr)].ravel()
+            plt.hist(plotdata,bins=Nbins,log=True)
+            plt.plot(xsamples,binwidth*self.cube.size*
+                     self.distribution.pdf(xsamples,0,1),
+                     linewidth=4,alpha=0.75)
+            plt.xlabel('Normalized Signal-to-Noise Ratio')
+            plt.ylabel('Number of Points')
 
-            snr = data/self.get_scale_cube()
-            self.spectral_norm = nanstd(snr.reshape((snr.shape[0],
-                                                     snr.shape[1]*
-                                                     snr.shape[2])),
-                                        axis=1)*self.spectral_norm
-            if spectral_smooth is not None:
-                self.spectral_norm = ssig.medfilt(self.spectral_norm,
-                    kernel_size=spectral_smooth)
-        self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
-        self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
-        self.spatial_norm[~self.spatial_footprint]=np.nan
-        self.distribution_shape=(0,self.scale)    
-        return
+        else:
+            xmin = self.distribution.ppf(1./self.cube.size,*
+                                         self.distribution_shape)
+            xmax = self.distribution.ppf(1-1./self.cube.size,*
+                                         self.distribution_shape)
+            xsamples = np.linspace(xmin,xmax,100)
+            Nbins = np.min([int(np.sqrt(self.cube.size)),100])
+            print Nbins
+            binwidth = (xmax-xmin)/Nbins
+            plt.xlim(xmin,xmax)
+            plotdata = self.cube.flattened().value            
+
+            plt.hist(plotdata,bins=Nbins,log=True)
+            plt.plot(xsamples,binwidth*self.cube.size*
+                     self.distribution.pdf(xsamples,*self.distribution_shape),
+                     linewidth=4,alpha=0.75)
+            plt.xlabel('Data Value')
+            plt.ylabel('Number of Points')
+
+    def plot_spectrum(self):
+        """
+        Makes a plot of the spectral variation of the noise.
+        """
+
+        if self.spectral_norm is None:
+            return
+
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return
+
+        channel = np.arange(len(self.spectral_norm))
+        plt.clf()
+        plt.plot(channel, self.spectral_norm)
+
+    def plot_map(self):
+        """
+        Makes a plot of the spatial variation of the noise.
+        """
+
+        if self.spatial_norm is None:
+            return
+
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return
+
+        plt.clf()
+        plt.imshow(self.spatial_norm, origin="lower")
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Parallel generic scipy.stats approach
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+    # Right now this is more of a roadmap than a viable
+    # implementation.
 
     def calculate_fit(self):
         """
@@ -443,7 +578,7 @@ class Noise:
             self.distribution_shape),))
 
         # Get the data from the spectral cube object
-        data = self.cube.filled_data[:]
+        data = self.cube.filled_data[:].value
 
         # Initialize an iterator over the cube
         iterator = np.nditer(data,flags=['multi_index'])
@@ -488,176 +623,53 @@ class Noise:
         # Place the fit distribution into memory
         self.distribution_shape_map = shape_map
 
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Manipulate the noise estimates
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    def smooth_noise_map(
-            self):
-        raise NotImplementedError()
-
-    def smooth_noise_spectra(
-            self):
-        raise NotImplementedError()
-
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Interface with signal
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    def mask_out_signal(self,niter=1):
-        """
-        Sets the mask property of the SpectralCube associated with the noise object
-        to exclude the noise through a (iterative) application of the Chauvenet 
-        rejection criterion (i.e., mask out all points outside of +/- N sigma of zero).
-
-        Parameters
-        ----------
-        niter : number
-            Number of iterations used in estimating the separate 
-            components of the spatial and spectral noise variations.
-            Default=1
-        """
-        for count in range(niter):
-            if self.spatial_norm is not None:
-                noise = self.get_scale_cube()
-                snr = self.cube.filled_data[:]/noise
-            else:
-                snr = self.cube.filled_data[:]/self.scale
-            # Include negatives in the signal mask or not?
-            newmask = (np.abs(snr)<sig_n_outliers(self.cube.size),self.cube.wcs)
-            self.cube = self.cube.with_mask(newmask)
-
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Visualization methods
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
-
-    def plot_histogram(self,normalize=True):
-        """
-        Makes a plot of the data distribution and the estimated
-        parameters of the PDF.
-
-        Parameters
-        ----------
-        normalize : Normalize the plot by the spatially and 
-        spectrally varying noise scale to cast the plot in terms of 
-        signal-to-noise ratio. Default: True
-        """
-
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            return
-
-        if normalize:
-            xmin = self.distribution.ppf(1./self.cube.size,0,1)
-            xmax = self.distribution.ppf(1-1./self.cube.size,0,1)
-            xsamples = np.linspace(xmin,xmax,100)
-            Nbins = np.min([int(np.sqrt(self.cube.size)),100])
-            binwidth = (xmax-xmin)/Nbins
-            plt.xlim(xmin,xmax)
-            data = self.cube.filled_data[:].astype('=f')
-            scale = self.get_scale_cube()
-            snr = data/scale
-            plotdata = snr[np.isfinite(snr)].ravel()
-            plt.hist(plotdata,bins=Nbins,log=True)
-            plt.plot(xsamples,binwidth*self.cube.size*
-                     self.distribution.pdf(xsamples,0,1),
-                     linewidth=4,alpha=0.75)
-            plt.xlabel('Normalized Signal-to-Noise Ratio')
-            plt.ylabel('Number of Points')
-
-        else:
-            xmin = self.distribution.ppf(1./self.cube.size,*
-                                         self.distribution_shape)
-            xmax = self.distribution.ppf(1-1./self.cube.size,*
-                                         self.distribution_shape)
-            xsamples = np.linspace(xmin,xmax,100)
-            Nbins = np.min([int(np.sqrt(self.cube.size)),100])
-            binwidth = (xmax-xmin)/Nbins
-            plt.xlim(xmin,xmax)
-            plotdata = self.cube.flattened().value            
-
-            plt.hist(plotdata,bins=Nbins,log=True)
-            plt.plot(xsamples,binwidth*self.cube.size*
-                     self.distribution.pdf(xsamples,*self.distribution_shape),
-                     linewidth=4,alpha=0.75)
-            plt.xlabel('Data Value')
-            plt.ylabel('Number of Points')
-
-    def plot_spectrum(self):
-        """
-        Makes a plot of the spectral variation of the noise.
-        """
-
-        if self.spectral_norm is None:
-            return
-
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            return
-
-        channel = np.arange(len(self.spectral_norm))
-        plt.plot(channel, self.spectral_norm)
-
-    def plot_map(self):
-        """
-        Makes a plot of the spatial variation of the noise.
-        """
-
-        if self.spatial_norm is None:
-            return
-
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            return
-
-        plt.imshow(channel, self.spatial_norm, origin="lower")
-
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # EXTERNAL FUNCTIONS STILL INTEGRAL TO NOISE
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
-def mad(data, sigma=True, axis=None):
-    """
-    Return the median absolute deviation.  Axis functionality adapted
+def mad(
+        data, 
+        sigma=True, 
+        axis=None,
+        force=False,
+        medval=0.0,
+        nans=False):
+    """Return the median absolute deviation (or the absolute deviation
+    about a fixed value - default zero - if force is set to True). By
+    default returns the equivalent sigma. Axis functionality adapted
     from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
+    Flips nans to True (default false) to use with nans.
     """
     if axis>0:
-        med = np.median(data.swapaxes(0,axis),axis=0)
-        mad = np.median(np.abs(data.swapaxes(0,axis) - med),axis=0)
+        if force:
+            med = medval
+        else:
+            if nans:
+                med = nanmedian(data.swapaxes(0,axis),axis=0)
+            else:
+                med = np.median(data.swapaxes(0,axis),axis=0)
+        if nans:
+            mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
+        else:
+            mad = np.median(np.abs(data.swapaxes(0,axis) - med),axis=0)
     else:
-        med = np.median(data,axis=axis)
+        if force:
+            med = medval
+        else:
+            med = np.median(data,axis=axis)
         mad = np.median(np.abs(data - med),axis=axis)
     if sigma==False:
         return mad
     else:
         return mad*1.4826
 
-def nanmad(data, sigma=True, axis=None, median_value=None):
-    """
-    Return the median absolute deviation.  Axis functionality adapted
-    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
-    """
-    if axis>0:
-        if median_value is None:
-            med = nanmedian(data.swapaxes(0,axis),axis=0)
-        else:
-            med = median_value
-        mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
-    else:
-        if median_value is None:
-            med = nanmedian(data,axis=axis)
-        else:
-            med = median_value
-        mad = nanmedian(np.abs(data - med),axis=axis)
-    if not sigma:
-        return mad
-    else:
-        return mad*1.4826
+# COMMENTARY: Deprecate or incorporate (axis functionality would be
+# ideal)
 
-def sigma_rob(data, iterations=1, thresh=3.0):
+def sigma_rob(
+        data, 
+        iterations=1, 
+        thresh=3.0):
     """
     Iterative m.a.d. based sigma with positive outlier rejection.
     """
@@ -677,12 +689,37 @@ def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
         perc *= 2.0
     return abs(ss.norm.ppf(perc))
 
+# COMMENTARY: The above two are good here, this should either go to a
+# utils directory or move to the spectral_cube object (the latter
+# preferrably).
+
 def get_pixel_scales(mywcs):
+    """Extract a pixel scale (this assumes square pixels) from a wcs.
+    """
     # borrowed from @keflavich who borrowed from aplpy
-    mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
-    cdelt = np.array(mywcs.wcs.get_cdelt())
-    pc = np.array(mywcs.wcs.get_pc())
+    
+    # THIS NEEDS HELP!
+
+    pix00 = mywcs.wcs_pix2world(0,0,0,1)
+    pix10 = mywcs.wcs_pix2world(1,0,0,1)
+    pix01 = mywcs.wcs_pix2world(0,1,0,1)
+    
+    scale1 = ((pix00[0] - pix01[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
+             (pix00[1] - pix01[1])**2)**0.5
+    scale2 = ((pix00[0] - pix10[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
+             (pix00[1] - pix10[1])**2)**0.5
+
+    if abs((scale1 - scale2)/scale1) > 0.1:
+        print "Pixels may not be square!"
+    
+    return scale1
+
+    #mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
+    #cdelt = np.array(mywcs.wcs.get_cdelt())
+    #pc = np.array(mywcs.wcs.get_pc())
     # I too like to live dangerously:
-    scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
-     cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
-    return abs(scale[0])
+    #scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
+    # cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
+    #return abs(scale[0])
+
+
