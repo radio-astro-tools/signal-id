@@ -403,7 +403,32 @@ class Noise:
             signal_mask=False,
             verbose=False):
         """
-        High level noise estimation procedure.
+        High level noise estimation procedure.  Fills in spatial and
+        spectral norm estimates for the noise objects on calling.
+
+        Parameters
+        ----------
+        method : {'MAD','STD'}
+            Chooses method for estimating noise variance either 'MAD'
+            for median absolute deviation and 'STD' for standard
+            deviation.  Default: 'MAD'
+        niter : int
+            Number of iterations used in refining spatial vs. spectral
+            estimates.
+        spatial_flat : bool
+            If True asserts that there is no spatial variation in the
+            noise scale. Default: False
+        spectral_flat : bool
+            If True asserts that there is no spectail variation in the
+            noise scale.  Default: False
+        spatial_smooth : arraylike
+            Smooth spatial norm estimate by this kernel.
+        spectral_smooth : arraylike
+            Smooth spectral norm estimate by this kernel.
+        signal_mask : bool
+            Mask out signal at end of each iteration.  Default: False
+        verbose:
+            Increase verbosity to maximum!  Default: False
         """
 
         # Calculate the overall scale
