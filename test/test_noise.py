@@ -10,7 +10,7 @@ def test_mad():
     assert noise.mad(np.array([1,2,3])) == 1.4826
 
 def test_nanmad():
-    assert noise.nanmad(np.array([1,2,3,np.nan,np.nan,np.nan])) == 1.4826
+    assert noise.mad(np.array([1,2,3,np.nan,np.nan,np.nan]),nans=True) == 1.4826
 
 def test_scalegen():
     np.random.seed(8675309)

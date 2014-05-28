@@ -619,9 +619,9 @@ class Noise:
                 shape_map[position[0],
                           position[1],
                           position[2],
-                          1] = nanmad(data[xmatch[inarray].ravel(),
-                                           ymatch[inarray].ravel(),
-                                           zmatch[inarray].ravel()])
+                          1] = mad(data[xmatch[inarray].ravel(),
+                                        ymatch[inarray].ravel(),
+                                        zmatch[inarray].ravel()],nans=True)
             else:
                 shape_map[
                     position[0], 
@@ -674,8 +674,14 @@ def mad(
         if force:
             med = medval
         else:
-            med = np.median(data,axis=axis)
-        mad = np.median(np.abs(data - med),axis=axis)
+            if nans:
+                med = nanmedian(data,axis=axis)
+            else:
+                med = np.median(data,axis=axis)
+        if nans:
+            mad = nanmedian(np.abs(data-med),axis=axis)
+        else:
+            mad = np.median(np.abs(data - med),axis=axis)
     if sigma==False:
         return mad
     else:
