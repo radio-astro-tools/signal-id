@@ -14,13 +14,51 @@ def test_nanmad():
 
 def test_scalegen():
     np.random.seed(8675309)
-    data = np.random.randn(30,40,50)
-    mask = np.ones((30,40,50),dtype='bool')
+    data = np.random.randn(3,4,5)
+    mask = np.ones((3,4,5),dtype='bool')
     h = fits.header.Header.fromstring(HEADER_STR)
-    h['NAXIS1'] = 50
-    h['NAXIS2'] = 40
-    h['NAXIS3'] = 30
+    h['NAXIS1'] = 5
+    h['NAXIS2'] = 4
+    h['NAXIS3'] = 3
     h['NAXIS4'] = 1
-    cube = SpectralCube(data,wcs.WCS(h),mask=BooleanArrayMask(mask,wcs=wcs.WCS(h)))
+    cube = SpectralCube(data,wcs.WCS(h),
+                        mask=BooleanArrayMask(mask,wcs=wcs.WCS(h)))
     noiseobj = noise.Noise(cube)
-    assert np.isclose(noiseobj.scale,0.9912745238184928)
+    assert np.isclose(noiseobj.scale,1.1382529312849043)
+
+def test_spatialnorm():
+    np.random.seed(8675309)
+    data = np.random.randn(3,4,5)
+    mask = np.ones((3,4,5),dtype='bool')
+    h = fits.header.Header.fromstring(HEADER_STR)
+    h['NAXIS1'] = 5
+    h['NAXIS2'] = 4
+    h['NAXIS3'] = 3
+    h['NAXIS4'] = 1
+    cube = SpectralCube(data,wcs.WCS(h),
+                        mask=BooleanArrayMask(mask,wcs=wcs.WCS(h)))
+    noiseobj = noise.Noise(cube)
+    noiseobj.estimate_noise()
+    expected = np.array([[ 0.04430196,  0.78314449,  0.07475047,  0.5494684 ,  0.05790756],
+                         [ 0.32931213,  0.76450342,  1.33944507,  1.06416389,  0.27999452],
+                         [ 0.65174339,  0.24128143,  0.27692018,  0.0244925 ,  0.11167775],
+                         [ 0.60682872,  0.42536813,  0.20018275,  0.78523107,  0.95516435]])
+
+    assert np.allclose(noiseobj.spatial_norm,expected)
+
+def test_spectralnorm():
+    np.random.seed(8675309)
+    data = np.random.randn(3,4,5)
+    mask = np.ones((3,4,5),dtype='bool')
+    h = fits.header.Header.fromstring(HEADER_STR)
+    h['NAXIS1'] = 5
+    h['NAXIS2'] = 4
+    h['NAXIS3'] = 3
+    h['NAXIS4'] = 1
+    cube = SpectralCube(data,wcs.WCS(h),
+                        mask=BooleanArrayMask(mask,wcs=wcs.WCS(h)))
+    noiseobj = noise.Noise(cube)
+    noiseobj.estimate_noise()
+    expected = np.array([ 0.96907376,  0.93704583,  1.10124091])
+    assert np.allclose(noiseobj.spectral_norm,expected)
+

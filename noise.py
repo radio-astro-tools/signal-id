@@ -258,7 +258,9 @@ class Noise:
         if cumul:
             snr = self.cube.filled_data[:].value/self.get_scale_cube()
         else:
-            snr = self.cube.filled_data[:].value/self.scale
+            snr = self.cube.filled_data[:].value/\
+            np.reshape(self.spectral_norm,(self.spectral_norm.shape[0],1,1))/\
+                       self.scale
 
         # Switch estimate on methodology
         if method == "MAD":
@@ -295,7 +297,8 @@ class Noise:
         if cumul:
             snr = self.cube.filled_data[:].value/self.get_scale_cube()
         else:
-            snr = self.cube.filled_data[:].value/self.spatial/self.scale
+            snr = self.cube.filled_data[:].value/\
+                  np.reshape(self.spatial_norm,(1,)+self.spatial_norm.shape)/self.scale
 
         # Reshape the working data into a two-d array with the spatial
         # dimensions collapsed together
@@ -307,6 +310,10 @@ class Noise:
             estimate = mad(snr,axis=1,nans=True)
         if method == "STD":
             estimate = nanstd(snr, axis=1)
+
+        # Enforce that the geometric mean of the norm is unity.
+        # This stabilizes the iterative estimates.
+        estimate = estimate/np.exp(np.nanmean(np.log(estimate)))
 
         # If we are doing a cumulative calculation then append the estimate
         if cumul:
@@ -409,17 +416,21 @@ class Noise:
         if verbose:
             print "Iterating to find spatial and spectral variation."
         for count in range(niter):
-            print "Spatial"
             if not spatial_flat:
+                if verbose:
+                    print "Iteration {0}: Calculating spatial variation".format(count)
                 self.calculate_spatial(method=method, cumul=True)
-            print "Smooth"
             if spatial_smooth is not None or self.beam is not None:
+                if verbose:
+                    print "Iteration {0}: Smoothing spatial variations by beam".format(count)
                 self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
-            print "Spectral"
             if not spectral_flat:
+                if verbose:
+                    print "Iteration {0}: Calculating spectral variations".format(count)
                 self.calculate_spectral(method=method, cumul=True)
-            print "Smooth"
             if spectral_smooth is not None:
+                if verbose:
+                    print "Iteration {0}: Smoothing spectral variations".format(count)
                 self.spectral_smooth(kernel=spectral_smooth)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
