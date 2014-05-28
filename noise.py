@@ -400,6 +400,7 @@ class Noise:
             spatial_smooth=None,
             spectral_flat=False,
             spectral_smooth=None,
+            signal_mask=False,
             verbose=False):
         """
         High level noise estimation procedure.
@@ -432,7 +433,11 @@ class Noise:
                 if verbose:
                     print "Iteration {0}: Smoothing spectral variations".format(count)
                 self.spectral_smooth(kernel=spectral_smooth)
-
+            if signal_mask:
+                if verbose:
+                    print "Iteration {0}: Masking out signal".format(count)
+                self.mask_out_signal()
+                
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Interface with signal
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -537,7 +542,9 @@ class Noise:
         channel = np.arange(len(self.spectral_norm))
         plt.clf()
         plt.plot(channel, self.spectral_norm)
-
+        plt.xlabel('Channel')
+        plt.ylabel('Spectral norm of noise estimate')
+        
     def plot_map(self):
         """
         Makes a plot of the spatial variation of the noise.
@@ -553,7 +560,8 @@ class Noise:
 
         plt.clf()
         plt.imshow(self.spatial_norm, origin="lower")
-
+        plt.colorbar()
+        
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Parallel generic scipy.stats approach
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
