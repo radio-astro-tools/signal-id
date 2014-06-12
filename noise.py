@@ -258,7 +258,9 @@ class Noise:
         if cumul:
             snr = self.cube.filled_data[:].value/self.get_scale_cube()
         else:
-            snr = self.cube.filled_data[:].value/self.scale
+            snr = self.cube.filled_data[:].value/\
+            np.reshape(self.spectral_norm,(self.spectral_norm.shape[0],1,1))/\
+                       self.scale
 
         # Switch estimate on methodology
         if method == "MAD":
@@ -295,7 +297,8 @@ class Noise:
         if cumul:
             snr = self.cube.filled_data[:].value/self.get_scale_cube()
         else:
-            snr = self.cube.filled_data[:].value/self.spatial/self.scale
+            snr = self.cube.filled_data[:].value/\
+                  np.reshape(self.spatial_norm,(1,)+self.spatial_norm.shape)/self.scale
 
         # Reshape the working data into a two-d array with the spatial
         # dimensions collapsed together
@@ -307,6 +310,10 @@ class Noise:
             estimate = mad(snr,axis=1,nans=True)
         if method == "STD":
             estimate = nanstd(snr, axis=1)
+
+        # Enforce that the geometric mean of the norm is unity.
+        # This stabilizes the iterative estimates.
+        estimate = estimate/np.exp(np.nanmean(np.log(estimate)))
 
         # If we are doing a cumulative calculation then append the estimate
         if cumul:
@@ -393,9 +400,35 @@ class Noise:
             spatial_smooth=None,
             spectral_flat=False,
             spectral_smooth=None,
+            signal_mask=False,
             verbose=False):
         """
-        High level noise estimation procedure.
+        High level noise estimation procedure.  Fills in spatial and
+        spectral norm estimates for the noise objects on calling.
+
+        Parameters
+        ----------
+        method : {'MAD','STD'}
+            Chooses method for estimating noise variance either 'MAD'
+            for median absolute deviation and 'STD' for standard
+            deviation.  Default: 'MAD'
+        niter : int
+            Number of iterations used in refining spatial vs. spectral
+            estimates.
+        spatial_flat : bool
+            If True asserts that there is no spatial variation in the
+            noise scale. Default: False
+        spectral_flat : bool
+            If True asserts that there is no spectail variation in the
+            noise scale.  Default: False
+        spatial_smooth : arraylike
+            Smooth spatial norm estimate by this kernel.
+        spectral_smooth : arraylike
+            Smooth spectral norm estimate by this kernel.
+        signal_mask : bool
+            Mask out signal at end of each iteration.  Default: False
+        verbose:
+            Increase verbosity to maximum!  Default: False
         """
 
         # Calculate the overall scale
@@ -409,19 +442,27 @@ class Noise:
         if verbose:
             print "Iterating to find spatial and spectral variation."
         for count in range(niter):
-            print "Spatial"
             if not spatial_flat:
+                if verbose:
+                    print "Iteration {0}: Calculating spatial variation".format(count)
                 self.calculate_spatial(method=method, cumul=True)
-            print "Smooth"
             if spatial_smooth is not None or self.beam is not None:
+                if verbose:
+                    print "Iteration {0}: Smoothing spatial variations by beam".format(count)
                 self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
-            print "Spectral"
             if not spectral_flat:
+                if verbose:
+                    print "Iteration {0}: Calculating spectral variations".format(count)
                 self.calculate_spectral(method=method, cumul=True)
-            print "Smooth"
             if spectral_smooth is not None:
+                if verbose:
+                    print "Iteration {0}: Smoothing spectral variations".format(count)
                 self.spectral_smooth(kernel=spectral_smooth)
-
+            if signal_mask:
+                if verbose:
+                    print "Iteration {0}: Masking out signal".format(count)
+                self.mask_out_signal()
+                
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Interface with signal
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -526,7 +567,9 @@ class Noise:
         channel = np.arange(len(self.spectral_norm))
         plt.clf()
         plt.plot(channel, self.spectral_norm)
-
+        plt.xlabel('Channel')
+        plt.ylabel('Spectral norm of noise estimate')
+        
     def plot_map(self):
         """
         Makes a plot of the spatial variation of the noise.
@@ -542,7 +585,8 @@ class Noise:
 
         plt.clf()
         plt.imshow(self.spatial_norm, origin="lower")
-
+        plt.colorbar()
+        
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Parallel generic scipy.stats approach
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -619,9 +663,9 @@ class Noise:
                 shape_map[position[0],
                           position[1],
                           position[2],
-                          1] = nanmad(data[xmatch[inarray].ravel(),
-                                           ymatch[inarray].ravel(),
-                                           zmatch[inarray].ravel()])
+                          1] = mad(data[xmatch[inarray].ravel(),
+                                        ymatch[inarray].ravel(),
+                                        zmatch[inarray].ravel()],nans=True)
             else:
                 shape_map[
                     position[0], 
@@ -674,8 +718,14 @@ def mad(
         if force:
             med = medval
         else:
-            med = np.median(data,axis=axis)
-        mad = np.median(np.abs(data - med),axis=axis)
+            if nans:
+                med = nanmedian(data,axis=axis)
+            else:
+                med = np.median(data,axis=axis)
+        if nans:
+            mad = nanmedian(np.abs(data-med),axis=axis)
+        else:
+            mad = np.median(np.abs(data - med),axis=axis)
     if sigma==False:
         return mad
     else:
