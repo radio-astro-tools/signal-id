@@ -353,6 +353,9 @@ class Noise:
             self,
             kernel=None,
             convbeam=True,
+            spatial_smooth=None,
+            spectral_smooth=None,
+            niter=1
             ):
         """
         Smooth the noise estimate in the spatial dimension. Two
@@ -475,7 +478,9 @@ class Noise:
             if spatial_smooth is not None or self.beam is not None:
                 if verbose:
                     print "Iteration {0}: Smoothing spatial variations by beam".format(count)
-                self.spatial_smooth(kernel=spatial_smooth,convbeam=True)
+                self.spatial_smooth(kernel=spatial_smooth, convbeam=True,
+                                    niter=niter, spatial_smooth=spatial_smooth,
+                                    spectral_smooth=spectral_smooth)
             if not spectral_flat:
                 if verbose:
                     print "Iteration {0}: Calculating spectral variations".format(count)
