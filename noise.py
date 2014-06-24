@@ -236,7 +236,7 @@ class Noise:
         """
         if method == "MAD":
             negs = self.cube.filled_data[:].value.astype('=f')
-            negs = negs[negs < 0]
+            negs = negs[negs > 0]
             self.scale = mad(
                 negs,
                 force=True,
