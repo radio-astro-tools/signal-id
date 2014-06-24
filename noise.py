@@ -167,6 +167,9 @@ class Noise:
             self.spatial_norm = np.ones(self.cube.shape[-2:])
             self.spectral_norm = np.ones((self.cube.shape[0]))
 
+        # Compute the scale_cube
+        self.get_scale_cube()
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Expose the noise in various ways
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -179,10 +182,15 @@ class Noise:
                          (self.spectral_norm.shape + tuple((1, 1))))
         ax12 = np.reshape(self.spatial_norm,
                           tuple((1,)) + self.spatial_norm.shape)
-        noise = (ax12*ax0)*self.scale
-        return noise
 
-    def cube_of_noise(self):
+        self._scale_cube = (ax12 * ax0) * self.scale
+        return self
+
+    @property
+    def scale_cube(self):
+        return self._scale_cube
+
+    def get_noise_cube(self):
         """
         Generates a data cube of randomly generated noise with properties
         matching the measured distribution.
@@ -200,7 +208,12 @@ class Noise:
                                                   beam,
                                                   normalize_kernel=True)
 
-        return noise * self.get_scale_cube()
+            self._noise_cube = noise * self.scale_cube
+        return self
+
+    @property
+    def noise_cube(self):
+        return self._noise_cube
 
         # Eventually, we want to use self.distribution.rvs for arbitrary distributions
 
@@ -210,7 +223,7 @@ class Noise:
         Return a signal-to-noise cube.
         """
 
-        return self.cube.filled_data[:].value/self.get_scale_cube()
+        return self.cube.filled_data[:].value/self.scale_cube
 
         if as_prob:
             raise NotImplementedError()
@@ -276,7 +289,7 @@ class Noise:
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = self.cube.filled_data[:].value/self.get_scale_cube()
+            snr = self.cube.filled_data[:].value/self.scale_cube
         else:
             snr = self.cube.filled_data[:].value/\
             np.reshape(self.spectral_norm,(self.spectral_norm.shape[0],1,1))/\
@@ -315,7 +328,7 @@ class Noise:
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = self.cube.filled_data[:].value/self.get_scale_cube()
+            snr = self.cube.filled_data[:].value/self.scale_cube
         else:
             snr = self.cube.filled_data[:].value/\
                   np.reshape(self.spatial_norm,(1,)+self.spatial_norm.shape)/self.scale
@@ -374,7 +387,7 @@ class Noise:
             self.spatial_norm = np.ones(data.shape[-2:])
             self.spectral_norm = np.ones((data.shape[0]))
         for count in range(niter):
-            scale = self.get_scale_cube()
+            scale = self.scale_cube
             snr = data/scale
             self.spatial_norm = nanstd(snr,axis=0)*self.spatial_norm
             if self.beam is not None:
@@ -391,7 +404,7 @@ class Noise:
                 self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
                     kernel_size=spatial_smooth)
 
-            snr = data/self.get_scale_cube()
+            snr = data/self.scale_cube
             self.spectral_norm = nanstd(snr.reshape((snr.shape[0],
                                                      snr.shape[1]*
                                                      snr.shape[2])),
@@ -516,7 +529,7 @@ class Noise:
 
         for count in range(niter):
             if self.spatial_norm is not None:
-                noise = self.get_scale_cube()
+                noise = self.scale_cube
                 snr = self.cube.filled_data[:].value/noise
             else:
                 snr = self.cube.filled_data[:].value/self.scale
@@ -553,7 +566,7 @@ class Noise:
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
             data = self.cube.filled_data[:].value.astype('=f')
-            scale = self.get_scale_cube()
+            scale = self.scale_cube
             snr = data/scale
             plotdata = snr[np.isfinite(snr)].ravel()
             plt.hist(plotdata,bins=Nbins,log=True)
