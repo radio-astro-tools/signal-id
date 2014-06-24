@@ -27,10 +27,10 @@ except ImportError:
 
 # Astropy - used for convolution and WCS
 import astropy.wcs
-from astropy.convolution import convolve_fft,convolve
+from astropy.convolution import convolve_fft, convolve, Kernel2D
 
 # Spectral cube object from radio-astro-tools
-from spectral_cube import SpectralCube,BooleanArrayMask
+from spectral_cube import SpectralCube, BooleanArrayMask
 
 # Radio beam object from radio-astro-tools
 try:
@@ -38,7 +38,7 @@ try:
 except ImportError:
     warnings.warn("No radio_beam.Beam instances found. Convolution\
      with radio beams will not work")
-
+    Beam = type(None)
 # Utility functions from this package
 from utils import *
 
@@ -47,11 +47,11 @@ from utils import *
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
 class Noise:
-    """Class used to track the parameters of the noise in a radio data cube.  
+    """Class used to track the parameters of the noise in a radio data cube.
 
     Limitations
     -----------
-    Many of the routines in the package rely on the assumption of the 
+    Many of the routines in the package rely on the assumption of the
     data distribution begin centered around zero.
 
     Right now, a normal distribution is assumed for a large amount of
@@ -69,7 +69,7 @@ class Noise:
 
     # This is a global "representative" noise distribution width
     # (e.g., sigma for the normal distribution) as a scalar
-    scale = None   
+    scale = None
 
     # This is a 2d (spatial) map of the width parameter, normalized to
     # the overall noise scaling.
@@ -85,7 +85,7 @@ class Noise:
     # This is a two-d mask indicating where we have data to measure
     # the spatial noise
     spatial_footprint = None
-    
+
     # This is a one-d mask indicating where we have data to measure
     # the spectral noise
     spectral_footprint = None
@@ -115,7 +115,7 @@ class Noise:
 
     cube = None
     beam = None
-    
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Initialization
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -135,18 +135,24 @@ class Noise:
         else:
             warnings.warn("Noise currently requires a SpectralCube instance.")
 
-        if isinstance(beam,Beam):
-            self.beam = beam
+        if isinstance(beam, Beam):
+            pass
+        elif isinstance(beam, Kernel2D):
+            self.astropy_beam_flag = True
+        else:
+            warnings.warn("beam must be a radio_beam Beam object or an astropy\
+                           Kernel2D object. All beam operations are disabled.")
+        self.beam = beam
 
         # Default to a normal distribution
         self.distribution = ss.norm
-        
+
         # SUGGESTION: calculate on initialization?
 
         # Fit the data
         if scale is None:
-            self.calculate_scale() # [1] is the std. of a Gaussian
-            self.spatial_norm = np.ones([self.cube.shape[1],self.cube.shape[2]])
+            self.calculate_scale()  # [1] is the std. of a Gaussian
+            self.spatial_norm = np.ones(self.cube.shape[-2:])
             self.spectral_norm = np.ones((self.cube.shape[0]))
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -157,10 +163,10 @@ class Noise:
         """
         Return a cube of noise width estimates.
         """
-        ax0 = np.reshape(self.spectral_norm, 
-                         (self.spectral_norm.shape+tuple((1,1))))
+        ax0 = np.reshape(self.spectral_norm,
+                         (self.spectral_norm.shape + tuple((1, 1))))
         ax12 = np.reshape(self.spatial_norm,
-                          tuple((1,))+self.spatial_norm.shape)
+                          tuple((1,)) + self.spatial_norm.shape)
         noise = (ax12*ax0)*self.scale
         return noise
 
@@ -168,19 +174,22 @@ class Noise:
         """
         Generates a data cube of randomly generated noise with properties
         matching the measured distribution.
-        """        
+        """
 
         noise = np.random.randn(*self.cube.shape)
         if self.beam is not None:
-            beam = self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
+            if self.astropy_beam_flag:
+                beam = self.beam
+            else:
+                beam = self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
             # Iterate convolution over plane (ugh)
             for plane in np.arange(self.cube.shape[0]):
-                noise[plane,:,:] = convolve_fft(noise[plane,:,:],
-                                                beam,
-                                                normalize_kernel=True)
-        
+                noise[plane, :, :] = convolve_fft(noise[plane, :, :],
+                                                  beam,
+                                                  normalize_kernel=True)
+
         return noise * self.get_scale_cube()
-            
+
         # Eventually, we want to use self.distribution.rvs for arbitrary distributions
 
     def snr(self,
@@ -195,7 +204,7 @@ class Noise:
             raise NotImplementedError()
 
     def from_file(self,
-                infile=None):
+                  infile=None):
         """
         Read noise fit results from file.
         """
@@ -213,28 +222,27 @@ class Noise:
         # Dump the scale cube?
 
         raise NotImplementedError()
-                
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Generate noise estimates
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     def calculate_scale(
             self,
             method="MAD"):
         """
-        Derive the scale of the noise distribution using only the 
+        Derive the scale of the noise distribution using only the
         negative values in the array and the MAD()
         """
         if method == "MAD":
-            negs = self.cube.flattened().value.astype('=f')
-            negs = negs[negs<0]
+            negs = self.cube.filled_data[:].value.astype('=f')
+            negs = negs[negs < 0]
             self.scale = mad(
-                negs, 
-                force=True, 
-                medval=0.0,
-                nans=True)
+                negs,
+                force=True,
+                medval=0.0)
         if method == "STD":
-            data = self.cube.filled_data[:].value.astype('=f')        
+            data = self.cube.filled_data[:].value.astype('=f')
             self.scale = nanstd(data)
 
         self.distribution_shape=(0,self.scale)
@@ -264,7 +272,7 @@ class Noise:
 
         # Switch estimate on methodology
         if method == "MAD":
-            estimate = mad(snr,axis=0,nans=True)
+            estimate = mad(snr, axis=0)
 
         if method == "STD":
             estimate = nanstd(snr,axis=0)
@@ -279,7 +287,7 @@ class Noise:
         self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
         self.spatial_norm[~self.spatial_footprint]=np.nan
         return
-        
+
     def calculate_spectral(
             self,
             method="MAD",
@@ -307,7 +315,7 @@ class Noise:
 
         # Switch on calculation methodology
         if method == "MAD":
-            estimate = mad(snr,axis=1,nans=True)
+            estimate = mad(snr, axis=1)
         if method == "STD":
             estimate = nanstd(snr, axis=1)
 
@@ -327,7 +335,7 @@ class Noise:
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Manipulate noise estimates
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     def spatial_smooth(
             self,
@@ -338,7 +346,7 @@ class Noise:
         Smooth the noise estimate in the spatial dimension. Two
         components: median smoothing and convolving with the beam.
         """
-        
+
         # Manually median filter (square box)
         if kernel is not None:
             print "Median filtering"
@@ -348,16 +356,22 @@ class Noise:
         data = self.cube.filled_data[:].astype('=f')
         self.scale = nanstd(data)
         if self.spatial_norm is None:
-            self.spatial_norm = np.ones((data.shape[1],data.shape[2]))
+            self.spatial_norm = np.ones(data.shape[-2:])
             self.spectral_norm = np.ones((data.shape[0]))
         for count in range(niter):
             scale = self.get_scale_cube()
             snr = data/scale
             self.spatial_norm = nanstd(snr,axis=0)*self.spatial_norm
             if self.beam is not None:
-                self.spatial_norm = convolve_fft(self.spatial_norm, 
-                    self.beam.as_kernel(get_pixel_scales(self.cube.wcs)),
-                    interpolate_nan=True,normalize_kernel=True)
+                if self.astropy_beam_flag:
+                    beam = self.beam
+                else:
+                    beam = self.beam.as_kernel(get_pixel_scales(self.cube.wcs))
+
+                self.spatial_norm = convolve_fft(self.spatial_norm,
+                                                 beam,
+                                                 interpolate_nan=True,
+                                                 normalize_kernel=True)
             if spatial_smooth is not None:
                 self.spatial_norm = ssig.medfilt2d(self.spatial_norm,
                     kernel_size=spatial_smooth)
@@ -373,7 +387,7 @@ class Noise:
         self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
         self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
         self.spatial_norm[~self.spatial_footprint]=np.nan
-        self.distribution_shape=(0,self.scale)    
+        self.distribution_shape=(0,self.scale)
         return
 
     def spectral_smooth(
@@ -435,7 +449,7 @@ class Noise:
         if verbose:
             print "Calculating overall scale."
         self.calculate_scale(method=method)
-        self.spatial_norm = np.ones([self.cube.shape[1],self.cube.shape[2]])
+        self.spatial_norm = np.ones(self.cube.shape[-2:])
         self.spectral_norm = np.ones((self.cube.shape[0]))
 
         # Iterate over spatial and spectral variations
@@ -462,7 +476,7 @@ class Noise:
                 if verbose:
                     print "Iteration {0}: Masking out signal".format(count)
                 self.mask_out_signal()
-                
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Interface with signal
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -470,13 +484,13 @@ class Noise:
     def mask_out_signal(self,niter=1):
         """
         Sets the mask property of the SpectralCube associated with the noise object
-        to exclude the noise through a (iterative) application of the Chauvenet 
+        to exclude the noise through a (iterative) application of the Chauvenet
         rejection criterion (i.e., mask out all points outside of +/- N sigma of zero).
 
         Parameters
         ----------
         niter : number
-            Number of iterations used in estimating the separate 
+            Number of iterations used in estimating the separate
             components of the spatial and spectral noise variations.
             Default=1
         """
@@ -495,7 +509,7 @@ class Noise:
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Visualization methods
-    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=    
+    # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     def plot_histogram(self,normalize=True):
         """
@@ -504,8 +518,8 @@ class Noise:
 
         Parameters
         ----------
-        normalize : Normalize the plot by the spatially and 
-        spectrally varying noise scale to cast the plot in terms of 
+        normalize : Normalize the plot by the spatially and
+        spectrally varying noise scale to cast the plot in terms of
         signal-to-noise ratio. Default: True
         """
 
@@ -542,7 +556,7 @@ class Noise:
             print Nbins
             binwidth = (xmax-xmin)/Nbins
             plt.xlim(xmin,xmax)
-            plotdata = self.cube.flattened().value            
+            plotdata = self.cube.flattened().value
 
             plt.hist(plotdata,bins=Nbins,log=True)
             plt.plot(xsamples,binwidth*self.cube.size*
@@ -569,7 +583,7 @@ class Noise:
         plt.plot(channel, self.spectral_norm)
         plt.xlabel('Channel')
         plt.ylabel('Spectral norm of noise estimate')
-        
+
     def plot_map(self):
         """
         Makes a plot of the spatial variation of the noise.
@@ -586,7 +600,7 @@ class Noise:
         plt.clf()
         plt.imshow(self.spatial_norm, origin="lower")
         plt.colorbar()
-        
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Parallel generic scipy.stats approach
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -610,9 +624,9 @@ class Noise:
             use_mad=False):
         """
         Calculates the shape of the distribution of the data in the cube by rolling
-        a structuring element(currently a box) over the data and fitting the 
-        distribution within the box.  The fit uses the currently defined scipy.stats 
-        distribution function, which defaults to a Normal distribution.  
+        a structuring element(currently a box) over the data and fitting the
+        distribution within the box.  The fit uses the currently defined scipy.stats
+        distribution function, which defaults to a Normal distribution.
 
         This updates the Noise.distribution_shape() vector in place
 
@@ -658,18 +672,18 @@ class Noise:
             inarray = (xmatch>=0)&(xmatch<data.shape[0])&\
                       (ymatch>=0)&(ymatch<data.shape[1])&\
                       (zmatch>=0)&(zmatch<data.shape[2])
-                        
-            if use_mad:                
+
+            if use_mad:
                 shape_map[position[0],
                           position[1],
                           position[2],
                           1] = mad(data[xmatch[inarray].ravel(),
                                         ymatch[inarray].ravel(),
-                                        zmatch[inarray].ravel()],nans=True)
+                                        zmatch[inarray].ravel()])
             else:
                 shape_map[
-                    position[0], 
-                    position[1], 
+                    position[0],
+                    position[1],
                     position[2],:] = self.distribution.fit(\
                                                            data[xmatch[inarray].ravel(),
                                                                 ymatch[inarray].ravel(),
@@ -690,43 +704,48 @@ class Noise:
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
 def mad(
-        data, 
-        sigma=True, 
+        data,
+        sigma=True,
         axis=None,
         force=False,
-        medval=0.0,
-        nans=False):
+        medval=0.0):
     """Return the median absolute deviation (or the absolute deviation
     about a fixed value - default zero - if force is set to True). By
     default returns the equivalent sigma. Axis functionality adapted
     from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
     Flips nans to True (default false) to use with nans.
     """
-    if axis>0:
+    # Check for nans in the data
+    nans = False
+    if np.isnan(data).any():
+        nans = True
+
+    if axis > 0:
         if force:
             med = medval
         else:
             if nans:
-                med = nanmedian(data.swapaxes(0,axis),axis=0)
+                med = nanmedian(data.swapaxes(0, axis), axis=0)
             else:
-                med = np.median(data.swapaxes(0,axis),axis=0)
+                med = np.median(data.swapaxes(0, axis), axis=0)
         if nans:
-            mad = nanmedian(np.abs(data.swapaxes(0,axis) - med),axis=0)
+            mad = nanmedian(np.abs(data.swapaxes(0, axis) - med), axis=0)
         else:
-            mad = np.median(np.abs(data.swapaxes(0,axis) - med),axis=0)
+            mad = np.median(np.abs(data.swapaxes(0, axis) - med), axis=0)
     else:
         if force:
             med = medval
         else:
             if nans:
-                med = nanmedian(data,axis=axis)
+                med = nanmedian(data, axis=axis)
             else:
-                med = np.median(data,axis=axis)
+                med = np.median(data, axis=axis)
         if nans:
-            mad = nanmedian(np.abs(data-med),axis=axis)
+            mad = nanmedian(np.abs(data - med), axis=axis)
         else:
-            mad = np.median(np.abs(data - med),axis=axis)
-    if sigma==False:
+            mad = np.median(np.abs(data - med), axis=axis)
+
+    if not sigma:
         return mad
     else:
         return mad*1.4826
@@ -735,8 +754,8 @@ def mad(
 # ideal)
 
 def sigma_rob(
-        data, 
-        iterations=1, 
+        data,
+        iterations=1,
         thresh=3.0):
     """
     Iterative m.a.d. based sigma with positive outlier rejection.
@@ -765,13 +784,13 @@ def get_pixel_scales(mywcs):
     """Extract a pixel scale (this assumes square pixels) from a wcs.
     """
     # borrowed from @keflavich who borrowed from aplpy
-    
+
     # THIS NEEDS HELP!
 
     pix00 = mywcs.wcs_pix2world(0,0,0,1)
     pix10 = mywcs.wcs_pix2world(1,0,0,1)
     pix01 = mywcs.wcs_pix2world(0,1,0,1)
-    
+
     scale1 = ((pix00[0] - pix01[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
              (pix00[1] - pix01[1])**2)**0.5
     scale2 = ((pix00[0] - pix10[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
@@ -779,7 +798,7 @@ def get_pixel_scales(mywcs):
 
     if abs((scale1 - scale2)/scale1) > 0.1:
         print "Pixels may not be square!"
-    
+
     return scale1
 
     #mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
