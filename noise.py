@@ -126,8 +126,20 @@ class Noise:
         scale=None,
         spatial_norm = None,
         spectral_norm = None,
-        beam = None):
-        """Construct a new Noise object."""
+        beam = None,
+        method="MAD"):
+        """
+        Construct a new Noise object.
+
+        Parameters
+        ----------
+
+        method : {'MAD','STD'}
+            Chooses method for estimating noise variance either 'MAD'
+            for median absolute deviation and 'STD' for standard
+            deviation.  Default: 'MAD'
+
+        """
 
         if isinstance(cube,SpectralCube):
             self.cube = cube
@@ -151,7 +163,7 @@ class Noise:
 
         # Fit the data
         if scale is None:
-            self.calculate_scale()  # [1] is the std. of a Gaussian
+            self.calculate_scale(method=method)  # [1] is the std. of a Gaussian
             self.spatial_norm = np.ones(self.cube.shape[-2:])
             self.spectral_norm = np.ones((self.cube.shape[0]))
 
@@ -243,7 +255,7 @@ class Noise:
                 medval=0.0)
         if method == "STD":
             data = self.cube.filled_data[:].value.astype('=f')
-            self.scale = nanstd(data)
+            self.scale = nanstd(data, axis=None)
 
         self.distribution_shape=(0,self.scale)
         return
