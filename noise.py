@@ -260,12 +260,17 @@ class Noise:
         negative values in the array and the MAD()
         """
         if method == "MAD":
-            negs = self.cube.filled_data[:].value.astype('=f')
-            negs = negs[negs > 0]
-            self.scale = mad(
-                negs,
-                force=True,
-                medval=0.0)
+            data = self.cube.filled_data[:].value.astype('=f')
+            if (data < 0).any():
+                negs = data[data < 0]
+                self.scale = mad(
+                    negs,
+                    force=True,
+                    medval=0.0)
+            else:
+                warnings.warn("No negative values in the cube. \
+                               Using STD to get scale.")
+                method = "STD"
         if method == "STD":
             data = self.cube.filled_data[:].value.astype('=f')
             self.scale = nanstd(data, axis=None)
@@ -382,7 +387,7 @@ class Noise:
                                                kernel_size=kernel)
 
         data = self.cube.filled_data[:].astype('=f')
-        self.scale = nanstd(data)
+
         if self.spatial_norm is None:
             self.spatial_norm = np.ones(data.shape[-2:])
             self.spectral_norm = np.ones((data.shape[0]))
