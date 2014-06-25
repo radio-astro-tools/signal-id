@@ -164,7 +164,7 @@ class Noise:
         # Fit the data
         if scale is None:
             self.calculate_scale(method=method)  # [1] is the std. of a Gaussian
-            self.spatial_norm = np.ones(self.cube.shape[-2:])
+            self.spatial_norm = np.ones((self.cube.shape[1], self.cube.shape[2]))
             self.spectral_norm = np.ones((self.cube.shape[0]))
 
         # Compute the scale_cube
@@ -260,7 +260,7 @@ class Noise:
         negative values in the array and the MAD()
         """
         if method == "MAD":
-            data = self.cube.filled_data[:].value.astype('=f')
+            data = self.cube.flattened().value.astype('=f')
             if (data < 0).any():
                 negs = data[data < 0]
                 self.scale = mad(
@@ -482,7 +482,7 @@ class Noise:
         if verbose:
             print "Calculating overall scale."
         self.calculate_scale(method=method)
-        self.spatial_norm = np.ones(self.cube.shape[-2:])
+        self.spatial_norm = np.ones((self.cube.shape[1], self.cube.shape[2]))
         self.spectral_norm = np.ones((self.cube.shape[0]))
 
         # Iterate over spatial and spectral variations
