@@ -141,7 +141,6 @@ class Noise(object):
             deviation.  Default: 'MAD'
 
         """
-
         if isinstance(cube,SpectralCube):
             self.cube = cube
         elif isinstance(cube, str):
@@ -149,7 +148,7 @@ class Noise(object):
         else:
             warnings.warn("Noise currently requires a SpectralCube instance.")
 
-        self.spatial_footprint = np.any(cube.get_mask_array(),axis=0)
+        self.spatial_footprint = np.any(self.cube.get_mask_array(),axis=0)
 
         if isinstance(beam, Beam):
             pass
@@ -182,10 +181,10 @@ class Noise(object):
         """
         Return a cube of noise width estimates.
         """
-        ax0 = np.reshape(self.spectral_norm,
-                         (self.spectral_norm.shape + tuple((1, 1))))
-        ax12 = np.reshape(self.spatial_norm,
-                          tuple((1,)) + self.spatial_norm.shape)
+
+        # Make spectral_norm and spatial_norm 3D arrays
+        ax0 = self.spectral_norm[:, np.newaxis, np.newaxis]
+        ax12 = self.spatial_norm[np.newaxis, :]
 
         self._scale_cube = (ax12 * ax0) * self.scale
         return self
@@ -301,11 +300,10 @@ class Noise(object):
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = self.cube.filled_data[:].value/self.scale_cube
+            snr = self.snr
         else:
             snr = self.cube.filled_data[:].value/\
-            np.reshape(self.spectral_norm,(self.spectral_norm.shape[0],1,1))/\
-                       self.scale
+                self.spectral_norm[:, np.newaxis, np.newaxis]/self.scale
 
         # Switch estimate on methodology
         if method == "MAD":
@@ -340,10 +338,10 @@ class Noise(object):
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = self.cube.filled_data[:].value/self.scale_cube
+            snr = self.snr
         else:
             snr = self.cube.filled_data[:].value/\
-                  np.reshape(self.spatial_norm,(1,)+self.spatial_norm.shape)/self.scale
+                  self.spatial_norm[np.newaxis, :]/self.scale
 
         # Reshape the working data into a two-d array with the spatial
         # dimensions collapsed together
