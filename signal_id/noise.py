@@ -46,7 +46,8 @@ from utils import *
 # The Noise Object
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
-class Noise:
+
+class Noise(SpectralCube):
     """Class used to track the parameters of the noise in a radio data cube.
 
     Limitations
@@ -259,8 +260,10 @@ class Noise:
         Derive the scale of the noise distribution using only the
         negative values in the array and the MAD()
         """
+
+        data = self.cube.flattened().value.astype('=f')
+
         if method == "MAD":
-            data = self.cube.flattened().value.astype('=f')
             if (data < 0).any():
                 negs = data[data < 0]
                 self.scale = mad(
@@ -272,9 +275,9 @@ class Noise:
                                Using STD to get scale.")
                 method = "STD"
         if method == "STD":
-            data = self.cube.filled_data[:].value.astype('=f')
-            self.scale = nanstd(data, axis=None)
+            self.scale = std(data, axis=None)
 
+        ### MEAN DEFAULTS TO 0 ALWAYS!!!
         self.distribution_shape=(0,self.scale)
         return
 
@@ -420,7 +423,8 @@ class Noise:
         self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
         self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
         self.spatial_norm[~self.spatial_footprint]=np.nan
-        self.distribution_shape=(0,self.scale)
+        ### THIS IS ALREADY SET IN calculate_scale
+        # self.distribution_shape=(0,self.scale)
         return
 
     def spectral_smooth(
@@ -785,17 +789,26 @@ def mad(
     else:
         return mad*1.4826
 
+
+def std(data, axis=None):
+    if axis > 0:
+        return nanstd(data.swapaxes(0, axis), axis=0)
+    else:
+        return nanstd(data, axis=axis)
+
 # COMMENTARY: Deprecate or incorporate (axis functionality would be
 # ideal)
 
 def sigma_rob(
         data,
         iterations=1,
-        thresh=3.0):
+        thresh=3.0,
+        function=mad,
+        *args):
     """
     Iterative m.a.d. based sigma with positive outlier rejection.
     """
-    noise = mad(data)
+    noise = function(data, *args)
     for i in range(iterations):
         ind = (data <= thresh*noise).nonzero()
         noise = mad(data[ind])
