@@ -47,7 +47,7 @@ from utils import *
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
 
-class Noise(SpectralCube):
+class Noise(object):
     """Class used to track the parameters of the noise in a radio data cube.
 
     Limitations
@@ -144,9 +144,12 @@ class Noise(SpectralCube):
 
         if isinstance(cube,SpectralCube):
             self.cube = cube
-            self.spatial_footprint = np.any(cube.get_mask_array(),axis=0)
+        elif isinstance(cube, str):
+            self.cube = SpectralCube.read(cube)
         else:
             warnings.warn("Noise currently requires a SpectralCube instance.")
+
+        self.spatial_footprint = np.any(cube.get_mask_array(),axis=0)
 
         if isinstance(beam, Beam):
             pass
