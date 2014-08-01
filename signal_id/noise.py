@@ -257,12 +257,12 @@ class Noise(object):
     # Generate noise estimates
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    def calculate_scale(
-            self,
-            method="MAD"):
+    def calculate_scale(self, method="MAD", iterations=1, thresh=3.0):
         """
         Derive the scale of the noise distribution using only the
-        negative values in the array and the MAD()
+        negative values in the array and the MAD, or using STD.
+        Both methods employ positive outlier rejection. The rejection
+        criterion is set by ```thresh```.
         """
 
         data = self.cube.flattened().value.astype('=f')
@@ -270,16 +270,16 @@ class Noise(object):
         if method == "MAD":
             if (data < 0).any():
                 negs = data[data < 0]
-                self.scale = mad(
-                    negs,
-                    force=True,
-                    medval=0.0)
+                self.scale = sigma_rob(negs, iterations=iterations,
+                                       thresh=thresh, function=mad,
+                                       function_kwargs={"force": True, "medval": 0.0})
             else:
                 warnings.warn("No negative values in the cube. \
                                Using STD to get scale.")
                 method = "STD"
         if method == "STD":
-            self.scale = std(data, axis=None)
+            self.scale = sigma_rob(data, iterations=iterations, thresh=thresh,
+                                   function=std, function_kwargs={'axis': 0})
 
         ### MEAN DEFAULTS TO 0 ALWAYS!!!
         self.distribution_shape=(0,self.scale)
@@ -808,11 +808,11 @@ def sigma_rob(
         iterations=1,
         thresh=3.0,
         function=mad,
-        *args):
+        function_kwargs={}):
     """
     Iterative m.a.d. based sigma with positive outlier rejection.
     """
-    noise = function(data, *args)
+    noise = function(data, **function_kwargs)
     for i in range(iterations):
         ind = (data <= thresh*noise).nonzero()
         noise = mad(data[ind])
