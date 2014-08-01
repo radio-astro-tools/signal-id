@@ -221,6 +221,7 @@ class Noise(object):
 
         # Eventually, we want to use self.distribution.rvs for arbitrary distributions
 
+    @property
     def snr(self,
             as_prob=False):
         """
