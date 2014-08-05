@@ -94,7 +94,7 @@ class RadioMask(object):
         self._linked_data = array
         self._value = np.isfinite(array)
         if thresh is not None:
-            self._value *= cube > thresh
+            self._value *= array > thresh
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Output
