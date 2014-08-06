@@ -8,6 +8,7 @@
 # python
 import time
 import copy
+import logging
 
 # numpy, scipy, Matplotlib
 import numpy as np
@@ -55,7 +56,7 @@ class RadioMask(object):
     # Construction
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    def __init__(self, data, thresh=None):
+    def __init__(self, data, thresh=None, backup=True):
         '''
 
         Parameters
@@ -77,6 +78,18 @@ class RadioMask(object):
 
         else:
             raise TypeError("Input of type %s is not accepted." % (type(data)))
+
+        # Start log of method calls
+        logging.basicConfig()
+        self._log = logging.getLogger("method_calls")
+        self._log.info("Object created on : ",
+                       time.asctime(time.localtime(time.time())))
+
+        # Switch on backup
+        if backup:
+            self.enable_backup()
+        else:
+            self.disable_backup()
 
     def from_file(self, fname, thresh=None):
         cube = read(fname)
@@ -218,13 +231,20 @@ class RadioMask(object):
     def disable_backup(self):
         self._implict_backup = False
 
-    def backup(self):
-        self._backup = self._value
+    def log_and_backup(self, func):
+        '''
+        Back-up and log method calls.
+        '''
+        self._log.info(func.__name__)
+        if self.is_backup_enabled:
+            self._backup = self._value.copy()
 
     def undo(self):
-        temp = self._backup.copy
-        self._backup = self._value
+        self._log.info("UNDO")
+        temp = self._backup.copy()
+        self._backup = self._value.copy()
         self._value = temp
+
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Operators
@@ -248,34 +268,41 @@ class RadioMask(object):
 
     # Inversion
     def invert(self, struct=None):
+        self.log_and_backup(self.invert)
         self._value = np.logical_not(self._value)
 
     # Dilation
     def dilate(self, struct=None, iterations=1):
-        self._value = nd.binary_dilation(self._value, struct=struct,
+        self.log_and_backup(self.dilate)
+        self._value = nd.binary_dilation(self._value, structure=struct,
                                          iterations=iterations)
 
     # Erosion
     def erode(self, struct=None, iterations=1):
-        self._value = nd.binary_erosion(self._value, struct=struct,
+        self.log_and_backup(self.erode)
+        self._value = nd.binary_erosion(self._value, structure=struct,
                                         iterations=iterations)
 
     # Opening
     def open(self, struct=None, iterations=1):
-        self._value = nd.binary_opening(self._value, struct=struct,
+        self.log_and_backup(self.open)
+        self._value = nd.binary_opening(self._value, structure=struct,
                                         iterations=iterations)
 
     # Closing
     def close(self, struct=None, iterations=1):
-        self._value = nd.binary_closing(self._value, struct=struct,
+        self.log_and_backup(self.close)
+        self._value = nd.binary_closing(self._value, structure=struct,
                                         iterations=iterations)
 
     # Reject on property
     def reject_region(self, func=None, thresh=None, struct=None):
+        # self.log_and_backup(self.reject_region)
         raise NotImplementedError()
 
     # Reject on volume (special case)
     def reject_on_volume(self, thresh=None, struct=None):
+        # self.log_and_backup(self.reject_volume)
         raise NotImplementedError()
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -309,3 +336,4 @@ class RadioMask(object):
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # VISUALIZATION AND DIAGNOSTICS
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
+
