@@ -100,18 +100,6 @@ class RadioMask(object):
     # Output
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    @property
-    def mask_array(self):
-        return self._value
-
-    @property
-    def backup_array(self):
-        return self._backup
-
-    @property
-    def linked_data(self):
-        return self._linked_data
-
     def copy(self):
         """
         Return a copy.
@@ -213,10 +201,6 @@ class RadioMask(object):
     # Undo/Redo
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    @property
-    def is_backup_enabled(self):
-        return self._implicit_backup
-
     def enable_backup(self):
         self._implict_backup = True
 
@@ -227,7 +211,7 @@ class RadioMask(object):
         self._backup = self._value
 
     def undo(self):
-        temp = self._backup.copy
+        temp = self._backup
         self._backup = self._value
         self._value = temp
 
