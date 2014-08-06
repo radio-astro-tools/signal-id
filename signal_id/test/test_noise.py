@@ -30,7 +30,7 @@ def test_scalegen():
     cube = SpectralCube(data, wcs.WCS(h),
                         mask=BooleanArrayMask(mask, wcs=wcs.WCS(h)))
     noiseobj = noise.Noise(cube)
-    assert np.isclose(noiseobj.scale, 0.534156264013)
+    assert np.isclose(noiseobj.scale, 1.1382529312849043)
 
 
 def test_spatialnorm():
@@ -39,10 +39,10 @@ def test_spatialnorm():
     noiseobj = noise.Noise(cube)
     noiseobj.estimate_noise()
     print noiseobj.spatial_norm
-    expected = np.array([[0.09440465,  1.66883096,  0.15928848, 1.17088213,  0.12339732],
-                         [0.70174314,  1.62910804,  2.85427202,  2.26766538,  0.59665047],
-                         [1.3888236,  0.51415533,  0.59009925,  0.05219196,  0.23797816],
-                         [1.29311331,  0.90643235,  0.42657667,  1.67327734,  2.03539431]])
+    expected = np.array([[ 0.04430196, 0.78314449, 0.07475047, 0.5494684 , 0.05790756],
+                         [ 0.32931213, 0.76450342, 1.33944507, 1.06416389, 0.27999452],
+                         [ 0.65174339, 0.24128143, 0.27692018, 0.0244925 , 0.11167775],
+                         [ 0.60682872, 0.42536813, 0.20018275, 0.78523107, 0.95516435]])
 
     assert np.allclose(noiseobj.spatial_norm, expected)
 
