@@ -101,6 +101,10 @@ class RadioMask(object):
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     @property
+    def mask_array(self):
+        return self._value
+
+    @property
     def backup_array(self):
         return self._backup
 
@@ -114,17 +118,17 @@ class RadioMask(object):
         """
         return copy.deepcopy(self)
 
-    def as_spec_cube(self, scale=True):
+    def as_spec_cube(self,scale=True):
         """
         Return a spectral cube. Use scale to change type.
         """
         if isinstance(self._linked_data, SpectralCube):
             return SpectralCube(self._value*scale,
                                 wcs=self._linked_data.wcs)
-        return SpectralCube(self._value*scale,
-                            wcs=self._linked_data.wcs)
+        return  SpectralCube(self._value*scale,
+                             wcs=self._linked_data.wcs)
 
-    def write(self, fname, scale=1):
+    def write(self,fname,scale=1):
         """
         Write to a file. Default to using ints.
         """
@@ -132,7 +136,7 @@ class RadioMask(object):
         cube = self.as_spec_cube(self, scale=scale)
         cube.write(fname)
 
-    def attach_to_cube(self, cube=None, empty=np.nan):
+    def attach_to_cube(self,cube=None,empty=np.nan):
         """
         Attach the mask to a cube and return the cube.
         """
@@ -160,21 +164,19 @@ class RadioMask(object):
     # Expose the mask in various ways
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    @property
     def as_array(self):
         """
         Expose the values.
         """
         return self._value
 
-    @property
     def as_indices(self):
         """
         As a tuple of indices where True, useful for indexing.
         """
         return np.where(self._value)
 
-    def as_index_array(self, coordaxis=0):
+    def as_index_array(self,coordaxis=0):
         """
         As a numpy array of True indices. Optionally specify the axis for
         the coordinates (0 or 1)
