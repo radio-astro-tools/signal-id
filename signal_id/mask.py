@@ -14,10 +14,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from scipy.ndimage import histogram
-from scipy.ndimage import binary_dilation
-from scipy.ndimage import binary_erosion
-from scipy.ndimage import label, find_objects
+import scipy.ndimage as nd
 
 # astropy
 
@@ -251,7 +248,7 @@ class RadioMask(object):
 
     # Inversion
     def invert(self, struct=None):
-        raise NotImplementedError()
+        self._value = np.logical_not(self._value)
 
     # Dilation
     def dilate(self, struct=None):
