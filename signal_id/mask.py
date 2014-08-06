@@ -25,6 +25,7 @@ from spectral_cube import SpectralCube
 # BASE CLASS
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
+
 class RadioMask(object):
     """
     Holds a binary array with associated metadata.
@@ -152,7 +153,6 @@ class RadioMask(object):
 
         return cube
 
-
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Expose the mask in various ways
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -198,10 +198,10 @@ class RadioMask(object):
     def independent_channels(self, struct=None):
         raise NotImplementedError()
 
-    def independent_areas(self,struct=None):
+    def independent_areas(self, struct=None):
         raise NotImplementedError()
 
-    def independent_cubes(self,struct=None):
+    def independent_cubes(self, struct=None):
         raise NotImplementedError()
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -251,20 +251,24 @@ class RadioMask(object):
         self._value = np.logical_not(self._value)
 
     # Dilation
-    def dilate(self, struct=None):
-        raise NotImplementedError()
+    def dilate(self, struct=None, iterations=1):
+        self._value = nd.binary_dilation(self._value, struct=struct,
+                                         iterations=iterations)
 
     # Erosion
-    def erode(self, struct=None):
-        raise NotImplementedError()
+    def erode(self, struct=None, iterations=1):
+        self._value = nd.binary_erosion(self._value, struct=struct,
+                                        iterations=iterations)
 
     # Opening
-    def open(self, struct=None):
-        raise NotImplementedError()
+    def open(self, struct=None, iterations=1):
+        self._value = nd.binary_opening(self._value, struct=struct,
+                                        iterations=iterations)
 
     # Closing
-    def close(self, struct=None):
-        raise NotImplementedError()
+    def close(self, struct=None, iterations=1):
+        self._value = nd.binary_closing(self._value, struct=struct,
+                                        iterations=iterations)
 
     # Reject on property
     def reject_region(self, func=None, thresh=None, struct=None):
