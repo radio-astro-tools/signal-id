@@ -813,7 +813,7 @@ def sigma_rob(
     noise = function(data, **function_kwargs)
     for i in range(iterations):
         ind = (data <= thresh*noise).nonzero()
-        noise = mad(data[ind])
+        noise = function(data[ind], **function_kwargs)
     return noise
 
 def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
