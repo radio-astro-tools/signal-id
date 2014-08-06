@@ -32,20 +32,20 @@ class RadioMask(object):
     """
     Holds a binary array with associated metadata.
     """
-
+    
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Attributes and Properties
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
+    
     # Current version of the array
-    _value = None
+    _value = None    
 
     # Previous version of the array
     _backup = None
 
-    # Toggles
+    # Toggles 
     _implicit_backup = True
-
+    
     # The associated cube
     _linked_data = None
 
@@ -57,33 +57,25 @@ class RadioMask(object):
     # Construction
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    def __init__(self, data, thresh=None):
-        '''
-
-        Parameters
-        ----------
-        data : {SpectralCube, str, np.ndarray}
-            Datacube to create the mask from.
-        thresh : float, optional
-            Threshold level used to create the mask.
-        '''
+    def __init__(
+        self,
+        data=None,
+        thresh=None
+        ):
 
         if isinstance(data, SpectralCube):
                 self.from_spec_cube(data, thresh=thresh)
 
-        elif isinstance(data, str):
+        if isinstance(data, str):
             self.from_file(data)
 
-        elif isinstance(data, np.ndarray):
+        if isinstance(data, np.ndarray):
             self.from_array(data)
-
-        else:
-            raise TypeError("Input of type %s is not accepted." % (type(data)))
 
     def from_file(self, fname, thresh=None):
         cube = read(fname)
         self.from_spec_cube(cube, thresh=None)
-
+        
     def from_spec_cube(self, cube, thresh=None):
         self._linked_data = cube
         self._value = cube._mask.include
@@ -94,7 +86,7 @@ class RadioMask(object):
         self._linked_data = array
         self._value = np.isfinite(array)
         if thresh is not None:
-            self._value *= cube > thresh
+            self._value *= cube > thresh        
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Output
@@ -105,7 +97,7 @@ class RadioMask(object):
         Return a copy.
         """
         return copy.deepcopy(self)
-
+        
     def as_spec_cube(self,scale=True):
         """
         Return a spectral cube. Use scale to change type.
@@ -123,30 +115,26 @@ class RadioMask(object):
         # So wasteful...
         cube = self.as_spec_cube(self, scale=scale)
         cube.write(fname)
-
+                
     def attach_to_cube(self,cube=None,empty=np.nan):
         """
-        Attach the mask to a cube and return the cube.
+        Attach the mask to a cube.
         """
         if cube is None:
             cube = self._linked_data
+            
+        if isinstance(cube,SpectralCube):
+            # Bad
+            cube._mask = self._value
+            return
 
-        if isinstance(cube, SpectralCube):
-            # Apply mask to SpectralCube
-            cube = cube.with_mask(self._value)
-
-        elif isinstance(cube, np.ndarray):
+        if isinstance(cube,np.ndarray):
             if cube.shape == self._value.shape:
                 # Replace False with NaNs
                 cube = np.where(self._value, cube, empty)
-            else:
-                raise ValueError("Mask is not the same shape as the cube.")
-
-        else:
-            raise TypeError("Cube insufficiently specified.")
-
-        return cube
-
+                return
+        
+        print "Cube insufficiently specified."
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Expose the mask in various ways
@@ -173,20 +161,20 @@ class RadioMask(object):
             return np.vstack(np.where(self._value))
         else:
             return np.vstack(np.where(self._value)).transpose()
-
+        
     def oned(self, axis=0, sum=False):
         raise NotImplementedError()
-
+        
     def twod(self, axis=0, sum=False):
         """
         Return a two-dimensional version of the mask.
         """
         if self._value.ndim == 2:
-            return self._value
+            return self._value     
         if sum:
-            return (np.sum(self._value, axis=axis))
-        else:
             return (np.max(self._value, axis=axis))
+        else:
+            return (np.sum(self._value, axis=axis))
 
     def independent_channels(self, struct=None):
         raise NotImplementedError()
@@ -238,15 +226,15 @@ class RadioMask(object):
     # Inversion
     def invert(self, struct=None):
         raise NotImplementedError()
-
+    
     # Dilation
     def dilate(self, struct=None):
         raise NotImplementedError()
-
+    
     # Erosion
     def erode(self, struct=None):
         raise NotImplementedError()
-
+    
     # Opening
     def open(self, struct=None):
         raise NotImplementedError()
@@ -254,7 +242,7 @@ class RadioMask(object):
     # Closing
     def close(self, struct=None):
         raise NotImplementedError()
-
+    
     # Reject on property
     def reject_region(self, func=None, thresh=None, struct=None):
         raise NotImplementedError()
@@ -272,7 +260,7 @@ class RadioMask(object):
         raise NotImplementedError()
 
     # Projected 2d prior ("drop down" a twod mask)
-
+    
     # Projected 3d prior ("inflate" a velocity field)
 
     # Define line-free channels
@@ -282,7 +270,7 @@ class RadioMask(object):
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     # Convolve-then-threshold (2+1d)
-
+    
     # High-reject-grow-low
 
     # Autotune thresholding
