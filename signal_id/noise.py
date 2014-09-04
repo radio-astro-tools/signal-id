@@ -18,13 +18,6 @@ import scipy.stats as ss
 import scipy.signal as ssig
 import warnings
 
-# Try to pull in bottleneck (a faster implementation of some numpy
-# functions) and default to scipy if this fails
-try:
-    from bottleneck import nanmedian, nanstd
-except ImportError:
-    from scipy.stats import nanmedian, nanstd
-
 # Astropy - used for convolution and WCS
 import astropy.wcs
 from astropy.convolution import convolve_fft, convolve, Kernel2D
@@ -46,7 +39,8 @@ from utils import *
 # The Noise Object
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 
-class Noise:
+
+class Noise(object):
     """Class used to track the parameters of the noise in a radio data cube.
 
     Limitations
@@ -140,12 +134,14 @@ class Noise:
             deviation.  Default: 'MAD'
 
         """
-
         if isinstance(cube,SpectralCube):
             self.cube = cube
-            self.spatial_footprint = np.any(cube.get_mask_array(),axis=0)
+        elif isinstance(cube, str):
+            self.cube = SpectralCube.read(cube)
         else:
             warnings.warn("Noise currently requires a SpectralCube instance.")
+
+        self.spatial_footprint = np.any(self.cube.get_mask_array(),axis=0)
 
         if isinstance(beam, Beam):
             pass
@@ -178,10 +174,10 @@ class Noise:
         """
         Return a cube of noise width estimates.
         """
-        ax0 = np.reshape(self.spectral_norm,
-                         (self.spectral_norm.shape + tuple((1, 1))))
-        ax12 = np.reshape(self.spatial_norm,
-                          tuple((1,)) + self.spatial_norm.shape)
+
+        # Make spectral_norm and spatial_norm 3D arrays
+        ax0 = self.spectral_norm[:, np.newaxis, np.newaxis]
+        ax12 = self.spatial_norm[np.newaxis, :]
 
         self._scale_cube = (ax12 * ax0) * self.scale
         return self
@@ -217,6 +213,7 @@ class Noise:
 
         # Eventually, we want to use self.distribution.rvs for arbitrary distributions
 
+    @property
     def snr(self,
             as_prob=False):
         """
@@ -252,29 +249,31 @@ class Noise:
     # Generate noise estimates
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    def calculate_scale(
-            self,
-            method="MAD"):
+    def calculate_scale(self, method="MAD", iterations=1, thresh=3.0):
         """
         Derive the scale of the noise distribution using only the
-        negative values in the array and the MAD()
+        negative values in the array and the MAD, or using STD.
+        Both methods employ positive outlier rejection. The rejection
+        criterion is set by ```thresh```.
         """
+
+        data = self.cube.flattened().value.astype('=f')
+
         if method == "MAD":
-            data = self.cube.flattened().value.astype('=f')
             if (data < 0).any():
                 negs = data[data < 0]
-                self.scale = mad(
-                    negs,
-                    force=True,
-                    medval=0.0)
+                self.scale = sigma_rob(negs, iterations=iterations,
+                                       thresh=thresh, function=mad,
+                                       function_kwargs={"force": True, "medval": 0.0})
             else:
                 warnings.warn("No negative values in the cube. \
                                Using STD to get scale.")
                 method = "STD"
         if method == "STD":
-            data = self.cube.filled_data[:].value.astype('=f')
-            self.scale = nanstd(data, axis=None)
+            self.scale = sigma_rob(data, iterations=iterations, thresh=thresh,
+                                   function=std, function_kwargs={'axis': 0})
 
+        ### MEAN DEFAULTS TO 0 ALWAYS!!!
         self.distribution_shape=(0,self.scale)
         return
 
@@ -294,11 +293,10 @@ class Noise:
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = self.cube.filled_data[:].value/self.scale_cube
+            snr = self.snr
         else:
             snr = self.cube.filled_data[:].value/\
-            np.reshape(self.spectral_norm,(self.spectral_norm.shape[0],1,1))/\
-                       self.scale
+                self.spectral_norm[:, np.newaxis, np.newaxis]/self.scale
 
         # Switch estimate on methodology
         if method == "MAD":
@@ -333,10 +331,10 @@ class Noise:
         # There are two approaches: iterate on top of the current
         # noise estimate or generate a new estimate
         if cumul:
-            snr = self.cube.filled_data[:].value/self.scale_cube
+            snr = self.snr
         else:
             snr = self.cube.filled_data[:].value/\
-                  np.reshape(self.spatial_norm,(1,)+self.spatial_norm.shape)/self.scale
+                  self.spatial_norm[np.newaxis, :]/self.scale
 
         # Reshape the working data into a two-d array with the spatial
         # dimensions collapsed together
@@ -420,7 +418,8 @@ class Noise:
         self.spectral_norm[np.isnan(self.spectral_norm) | (self.spectral_norm==0)]=1.
         self.spatial_norm[np.isnan(self.spatial_norm) | (self.spatial_norm==0)]=1.
         self.spatial_norm[~self.spatial_footprint]=np.nan
-        self.distribution_shape=(0,self.scale)
+        ### THIS IS ALREADY SET IN calculate_scale
+        # self.distribution_shape=(0,self.scale)
         return
 
     def spectral_smooth(
@@ -733,115 +732,3 @@ class Noise:
 
         # Place the fit distribution into memory
         self.distribution_shape_map = shape_map
-
-# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-# EXTERNAL FUNCTIONS STILL INTEGRAL TO NOISE
-# &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
-
-def mad(
-        data,
-        sigma=True,
-        axis=None,
-        force=False,
-        medval=0.0):
-    """Return the median absolute deviation (or the absolute deviation
-    about a fixed value - default zero - if force is set to True). By
-    default returns the equivalent sigma. Axis functionality adapted
-    from https://github.com/keflavich/agpy/blob/master/agpy/mad.py
-    Flips nans to True (default false) to use with nans.
-    """
-    # Check for nans in the data
-    nans = False
-    if np.isnan(data).any():
-        nans = True
-
-    if axis > 0:
-        if force:
-            med = medval
-        else:
-            if nans:
-                med = nanmedian(data.swapaxes(0, axis), axis=0)
-            else:
-                med = np.median(data.swapaxes(0, axis), axis=0)
-        if nans:
-            mad = nanmedian(np.abs(data.swapaxes(0, axis) - med), axis=0)
-        else:
-            mad = np.median(np.abs(data.swapaxes(0, axis) - med), axis=0)
-    else:
-        if force:
-            med = medval
-        else:
-            if nans:
-                med = nanmedian(data, axis=axis)
-            else:
-                med = np.median(data, axis=axis)
-        if nans:
-            mad = nanmedian(np.abs(data - med), axis=axis)
-        else:
-            mad = np.median(np.abs(data - med), axis=axis)
-
-    if not sigma:
-        return mad
-    else:
-        return mad*1.4826
-
-# COMMENTARY: Deprecate or incorporate (axis functionality would be
-# ideal)
-
-def sigma_rob(
-        data,
-        iterations=1,
-        thresh=3.0):
-    """
-    Iterative m.a.d. based sigma with positive outlier rejection.
-    """
-    noise = mad(data)
-    for i in range(iterations):
-        ind = (data <= thresh*noise).nonzero()
-        noise = mad(data[ind])
-    return noise
-
-def sig_n_outliers(n_data, n_out=1.0, pos_only=True):
-    """
-    Return the sigma needed to expect n (default 1) outliers given
-    n_data points.
-    """
-    perc = float(n_out)/float(n_data)
-    if pos_only == False:
-        perc *= 2.0
-    return abs(ss.norm.ppf(perc))
-
-# COMMENTARY: The above two are good here, this should either go to a
-# utils directory or move to the spectral_cube object (the latter
-# preferrably).
-
-def get_pixel_scales(mywcs):
-    """Extract a pixel scale (this assumes square pixels) from a wcs.
-    """
-    # borrowed from @keflavich who borrowed from aplpy
-
-    # THIS NEEDS HELP!
-
-    pix00 = mywcs.wcs_pix2world(0,0,0,1)
-    pix10 = mywcs.wcs_pix2world(1,0,0,1)
-    pix01 = mywcs.wcs_pix2world(0,1,0,1)
-
-    scale1 = ((pix00[0] - pix01[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
-             (pix00[1] - pix01[1])**2)**0.5
-    scale2 = ((pix00[0] - pix10[0])**2*np.cos(np.pi/180.*pix00[1])**2 + \
-             (pix00[1] - pix10[1])**2)**0.5
-
-    if abs((scale1 - scale2)/scale1) > 0.1:
-        print "Pixels may not be square!"
-
-    return scale1
-
-    #mywcs = mywcs.sub([astropy.wcs.WCSSUB_CELESTIAL])
-    #cdelt = np.array(mywcs.wcs.get_cdelt())
-    #pc = np.array(mywcs.wcs.get_pc())
-    # I too like to live dangerously:
-    #scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
-    # cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
-    #return abs(scale[0])
-
-
