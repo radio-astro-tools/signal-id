@@ -111,14 +111,6 @@ class RadioMask(object):
     # Output
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    @property
-    def backup_array(self):
-        return self._backup
-
-    @property
-    def linked_data(self):
-        return self._linked_data
-
     def copy(self):
         """
         Return a copy.
@@ -143,18 +135,19 @@ class RadioMask(object):
         cube = self.as_spec_cube(self, scale=scale)
         cube.write(fname)
 
-    def attach_to_cube(self, cube=None, empty=np.nan):
+    def attach_to_cube(self, cube=None, empty=np.NaN):
         """
-        Attach the mask to a cube and return the cube.
+        Attach the mask to a cube.
         """
         if cube is None:
             cube = self._linked_data
 
         if isinstance(cube, SpectralCube):
-            # Apply mask to SpectralCube
-            cube = cube.with_mask(self._value)
+            # Bad
+            cube._mask = self._value
+            return
 
-        elif isinstance(cube, np.ndarray):
+        if isinstance(cube, np.ndarray):
             if cube.shape == self._value.shape:
                 # Replace False with NaNs
                 cube = np.where(self._value, cube, empty)
@@ -170,14 +163,12 @@ class RadioMask(object):
     # Expose the mask in various ways
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    @property
     def as_array(self):
         """
         Expose the values.
         """
         return self._value
 
-    @property
     def as_indices(self):
         """
         As a tuple of indices where True, useful for indexing.
@@ -204,9 +195,9 @@ class RadioMask(object):
         if self._value.ndim == 2:
             return self._value
         if sum:
-            return (np.sum(self._value, axis=axis))
-        else:
             return (np.max(self._value, axis=axis))
+        else:
+            return (np.sum(self._value, axis=axis))
 
     def independent_channels(self, struct=None):
         raise NotImplementedError()
@@ -220,10 +211,6 @@ class RadioMask(object):
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Undo/Redo
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-    @property
-    def is_backup_enabled(self):
-        return self._implicit_backup
 
     def enable_backup(self):
         self._implict_backup = True
