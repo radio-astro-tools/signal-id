@@ -16,6 +16,7 @@ import scipy.ndimage as nd
 
 # radio tools
 from spectral_cube import SpectralCube, BooleanArrayMask
+from spectral_cube.masks import is_broadcastable
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # BASE CLASS
@@ -115,6 +116,10 @@ class RadioMask(object):
     @property
     def wcs(self):
         return self._wcs
+
+    @property
+    def shape(self):
+        return self._mask.shape
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Output
@@ -237,22 +242,41 @@ class RadioMask(object):
         self._backup = self._mask.copy()
         self._mask = temp
 
-
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Operators
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
     # Union
     def union(self, other):
-        raise NotImplementedError()
+        self.log_and_backup(self.union)
+        if isinstance(other, RadioMask):
+            other = other.mask
+        # Check if arrays are broadcastable
+        if not is_broadcastable(self.shape, other.shape):
+            raise ValueError("Mask shapes are not broadcastable.")
+
+        self._mask = np.logical_or(self._mask, other)
 
     # Intersection
     def intersection(self, other):
-        raise NotImplementedError()
+        self.log_and_backup(self.intersection)
+        if isinstance(other, RadioMask):
+            other = other.mask
+        # Check if arrays are broadcastable
+        if not is_broadcastable(self.shape, other.shape):
+            raise ValueError("Mask shapes are not broadcastable.")
+
+        self._mask = np.logical_and(self._mask, other)
 
     # Exclusive or
     def xor(self, other):
-        raise NotImplementedError()
+        self.log_and_backup(self.xor)
+        if isinstance(other, RadioMask):
+            other = other.mask
+        # Check if arrays are broadcastable
+        if not is_broadcastable(self.shape, other.shape):
+            raise ValueError("Mask shapes are not broadcastable.")
+
+        self._mask = np.logical_xor(self._mask, other)
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Manipulation
@@ -267,25 +291,25 @@ class RadioMask(object):
     def dilate(self, struct=None, iterations=1):
         self.log_and_backup(self.dilate)
         self._mask = nd.binary_dilation(self._mask, structure=struct,
-                                         iterations=iterations)
+                                        iterations=iterations)
 
     # Erosion
     def erode(self, struct=None, iterations=1):
         self.log_and_backup(self.erode)
         self._mask = nd.binary_erosion(self._mask, structure=struct,
-                                        iterations=iterations)
+                                       iterations=iterations)
 
     # Opening
     def open(self, struct=None, iterations=1):
         self.log_and_backup(self.open)
         self._mask = nd.binary_opening(self._mask, structure=struct,
-                                        iterations=iterations)
+                                       iterations=iterations)
 
     # Closing
     def close(self, struct=None, iterations=1):
         self.log_and_backup(self.close)
         self._mask = nd.binary_closing(self._mask, structure=struct,
-                                        iterations=iterations)
+                                       iterations=iterations)
 
     # Reject on property
     def reject_region(self, func=None, thresh=None, struct=None):
