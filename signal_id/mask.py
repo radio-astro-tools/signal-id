@@ -10,17 +10,12 @@ import time
 import copy
 import logging
 
-# numpy, scipy, Matplotlib
 import numpy as np
-
 import matplotlib.pyplot as plt
-
 import scipy.ndimage as nd
 
-# astropy
-
 # radio tools
-from spectral_cube import SpectralCube
+from spectral_cube import SpectralCube, BooleanArrayMask
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # BASE CLASS
@@ -91,21 +86,29 @@ class RadioMask(object):
         else:
             self.disable_backup()
 
-    def from_file(self, fname, thresh=None):
-        cube = read(fname)
+    def from_file(self, fname, thresh=None, format='fits'):
+        cube = SpectralCube.read(fname, format=format)
         self.from_spec_cube(cube, thresh=None)
 
     def from_spec_cube(self, cube, thresh=None):
         self._linked_data = cube
-        self._value = cube._mask.include
+        self._mask = cube._mask.include
         if thresh is not None:
-            self._value *= cube > thresh
+            self._mask *= cube > thresh
 
     def from_array(self, array, thresh=None):
         self._linked_data = array
-        self._value = np.isfinite(array)
+        self._mask = np.isfinite(array)
         if thresh is not None:
-            self._value *= array > thresh
+            self._mask *= array > thresh
+
+    @property
+    def linked_data(self):
+        return self._linked_data
+
+    @property
+    def mask(self):
+        return self._mask
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Output
@@ -122,10 +125,13 @@ class RadioMask(object):
         Return a spectral cube. Use scale to change type.
         """
         if isinstance(self._linked_data, SpectralCube):
-            return SpectralCube(self._value*scale,
+            return SpectralCube(self._mask*scale,
                                 wcs=self._linked_data.wcs)
-        return SpectralCube(self._value*scale,
+        return SpectralCube(self._mask*scale,
                             wcs=self._linked_data.wcs)
+
+    def to_mask(self):
+        return BooleanArrayMask(self._mask, self._linked_data.wcs)
 
     def write(self, fname, scale=1):
         """
@@ -144,13 +150,13 @@ class RadioMask(object):
 
         if isinstance(cube, SpectralCube):
             # Bad
-            cube._mask = self._value
-            return
+            mask = BooleanArrayMask(self._mask, self._linked_data.wcs)
+            return cube.with_mask(mask)
 
         if isinstance(cube, np.ndarray):
-            if cube.shape == self._value.shape:
+            if cube.shape == self._mask.shape:
                 # Replace False with NaNs
-                cube = np.where(self._value, cube, empty)
+                cube = np.where(self._mask, cube, empty)
             else:
                 raise ValueError("Mask is not the same shape as the cube.")
 
@@ -167,13 +173,13 @@ class RadioMask(object):
         """
         Expose the values.
         """
-        return self._value
+        return self._mask
 
     def as_indices(self):
         """
         As a tuple of indices where True, useful for indexing.
         """
-        return np.where(self._value)
+        return np.where(self._mask)
 
     def as_index_array(self, coordaxis=0):
         """
@@ -181,9 +187,9 @@ class RadioMask(object):
         the coordinates (0 or 1)
         """
         if coordaxis == 0:
-            return np.vstack(np.where(self._value))
+            return np.vstack(np.where(self._mask))
         else:
-            return np.vstack(np.where(self._value)).transpose()
+            return np.vstack(np.where(self._mask)).transpose()
 
     def oned(self, axis=0, sum=False):
         raise NotImplementedError()
@@ -192,12 +198,12 @@ class RadioMask(object):
         """
         Return a two-dimensional version of the mask.
         """
-        if self._value.ndim == 2:
-            return self._value
+        if self._mask.ndim == 2:
+            return self._mask
         if sum:
-            return (np.max(self._value, axis=axis))
+            return (np.max(self._mask, axis=axis))
         else:
-            return (np.sum(self._value, axis=axis))
+            return (np.sum(self._mask, axis=axis))
 
     def independent_channels(self, struct=None):
         raise NotImplementedError()
@@ -224,13 +230,13 @@ class RadioMask(object):
         '''
         self._log.info(func.__name__)
         if self.is_backup_enabled:
-            self._backup = self._value.copy()
+            self._backup = self._mask.copy()
 
     def undo(self):
         self._log.info("UNDO")
         temp = self._backup.copy()
-        self._backup = self._value.copy()
-        self._value = temp
+        self._backup = self._mask.copy()
+        self._mask = temp
 
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -256,30 +262,30 @@ class RadioMask(object):
     # Inversion
     def invert(self, struct=None):
         self.log_and_backup(self.invert)
-        self._value = np.logical_not(self._value)
+        self._mask = np.logical_not(self._mask)
 
     # Dilation
     def dilate(self, struct=None, iterations=1):
         self.log_and_backup(self.dilate)
-        self._value = nd.binary_dilation(self._value, structure=struct,
+        self._mask = nd.binary_dilation(self._mask, structure=struct,
                                          iterations=iterations)
 
     # Erosion
     def erode(self, struct=None, iterations=1):
         self.log_and_backup(self.erode)
-        self._value = nd.binary_erosion(self._value, structure=struct,
+        self._mask = nd.binary_erosion(self._mask, structure=struct,
                                         iterations=iterations)
 
     # Opening
     def open(self, struct=None, iterations=1):
         self.log_and_backup(self.open)
-        self._value = nd.binary_opening(self._value, structure=struct,
+        self._mask = nd.binary_opening(self._mask, structure=struct,
                                         iterations=iterations)
 
     # Closing
     def close(self, struct=None, iterations=1):
         self.log_and_backup(self.close)
-        self._value = nd.binary_closing(self._value, structure=struct,
+        self._mask = nd.binary_closing(self._mask, structure=struct,
                                         iterations=iterations)
 
     # Reject on property
