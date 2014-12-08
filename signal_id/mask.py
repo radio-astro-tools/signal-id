@@ -97,10 +97,12 @@ class RadioMask(object):
     def from_spec_cube(self, cube, thresh=None):
         self._linked_data = cube
         self._mask = cube._mask.include
+        self._wcs = cube.wcs
 
-    def from_array(self, array, thresh=None):
+    def from_array(self, array, thresh=None, wcs=None):
         self._linked_data = array
         self._mask = np.isfinite(array)
+        self._wcs = wcs
 
     @property
     def linked_data(self):
@@ -109,6 +111,10 @@ class RadioMask(object):
     @property
     def mask(self):
         return self._mask
+
+    @property
+    def wcs(self):
+        return self._wcs
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Output
@@ -126,12 +132,12 @@ class RadioMask(object):
         """
         if isinstance(self._linked_data, SpectralCube):
             return SpectralCube(self._mask*scale,
-                                wcs=self._linked_data.wcs)
+                                wcs=self._wcs)
         return SpectralCube(self._mask*scale,
-                            wcs=self._linked_data.wcs)
+                            wcs=self._wcs)
 
     def to_mask(self):
-        return BooleanArrayMask(self._mask, self._linked_data.wcs)
+        return BooleanArrayMask(self._mask, self._wcs)
 
     def write(self, fname, scale=1):
         """
@@ -149,7 +155,7 @@ class RadioMask(object):
             cube = self.linked_data
 
         if isinstance(cube, SpectralCube):
-            mask = BooleanArrayMask(self._mask, self._linked_data.wcs)
+            mask = BooleanArrayMask(self._mask, self._wcs)
             return cube.with_mask(mask)
 
         if isinstance(cube, np.ndarray):
