@@ -326,6 +326,10 @@ class RadioMask(object):
         # self.log_and_backup(self.reject_volume)
         raise NotImplementedError()
 
+    def apply_custom_func(self, func, *args):
+        self.log_and_backup(self.apply_custom_func)
+        self._mask = func(self._mask, *args)
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Mask generation
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
