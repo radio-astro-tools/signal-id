@@ -121,6 +121,10 @@ class RadioMask(object):
     def shape(self):
         return self._mask.shape
 
+    @property
+    def log(self):
+        return self._log
+
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Output
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
