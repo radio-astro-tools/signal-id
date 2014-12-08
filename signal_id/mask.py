@@ -51,7 +51,7 @@ class RadioMask(object):
     # Construction
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    def __init__(self, data, thresh=None, backup=True):
+    def __init__(self, data, thresh=None, backup=True, *args):
         '''
 
         Parameters
@@ -63,13 +63,13 @@ class RadioMask(object):
         '''
 
         if isinstance(data, SpectralCube):
-                self.from_spec_cube(data, thresh=thresh)
+                self.from_spec_cube(data, thresh=thresh, *args)
 
         elif isinstance(data, str):
-            self.from_file(data)
+            self.from_file(data, *args)
 
         elif isinstance(data, np.ndarray):
-            self.from_array(data)
+            self.from_array(data, *args)
 
         else:
             raise TypeError("Input of type %s is not accepted." % (type(data)))
