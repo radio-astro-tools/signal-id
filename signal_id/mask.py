@@ -193,16 +193,16 @@ class RadioMask(object):
     def oned(self, axis=0, sum=False):
         raise NotImplementedError()
 
-    def twod(self, axis=0, sum=False):
+    def twod(self, axis=0, sum_axis=False):
         """
         Return a two-dimensional version of the mask.
         """
         if self._mask.ndim == 2:
             return self._mask
-        if sum:
-            return (np.max(self._mask, axis=axis))
+        if sum_axis:
+            return np.sum(self._mask, axis=axis)
         else:
-            return (np.sum(self._mask, axis=axis))
+            return np.max(self._mask, axis=axis)
 
     def independent_channels(self, struct=None):
         raise NotImplementedError()
