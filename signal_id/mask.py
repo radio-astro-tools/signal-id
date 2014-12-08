@@ -174,12 +174,6 @@ class RadioMask(object):
     # Expose the mask in various ways
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    def as_array(self):
-        """
-        Expose the values.
-        """
-        return self._mask
-
     def as_indices(self):
         """
         As a tuple of indices where True, useful for indexing.
