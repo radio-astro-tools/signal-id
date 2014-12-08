@@ -74,6 +74,10 @@ class RadioMask(object):
         else:
             raise TypeError("Input of type %s is not accepted." % (type(data)))
 
+        # Apply specified threshold to create an initial mask
+        if thresh is not None:
+            self._mask *= self.linked_data > thresh
+
         # Start log of method calls
         logging.basicConfig()
         self._log = logging.getLogger("method_calls")
@@ -93,14 +97,10 @@ class RadioMask(object):
     def from_spec_cube(self, cube, thresh=None):
         self._linked_data = cube
         self._mask = cube._mask.include
-        if thresh is not None:
-            self._mask *= cube > thresh
 
     def from_array(self, array, thresh=None):
         self._linked_data = array
         self._mask = np.isfinite(array)
-        if thresh is not None:
-            self._mask *= array > thresh
 
     @property
     def linked_data(self):
@@ -146,10 +146,9 @@ class RadioMask(object):
         Attach the mask to a cube.
         """
         if cube is None:
-            cube = self._linked_data
+            cube = self.linked_data
 
         if isinstance(cube, SpectralCube):
-            # Bad
             mask = BooleanArrayMask(self._mask, self._linked_data.wcs)
             return cube.with_mask(mask)
 
