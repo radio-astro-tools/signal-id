@@ -16,7 +16,7 @@ import scipy.ndimage as nd
 
 # radio tools
 from spectral_cube import SpectralCube, BooleanArrayMask
-from spectral_cube.masks import is_broadcastable
+from spectral_cube.masks import is_broadcastable_and_smaller
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # BASE CLASS
@@ -260,7 +260,7 @@ class RadioMask(object):
         if isinstance(other, RadioMask):
             other = other.mask
         # Check if arrays are broadcastable
-        if not is_broadcastable(self.shape, other.shape):
+        if not is_broadcastable_and_smaller(self.shape, other.shape):
             raise ValueError("Mask shapes are not broadcastable.")
 
         self._mask = np.logical_or(self._mask, other)
@@ -271,7 +271,7 @@ class RadioMask(object):
         if isinstance(other, RadioMask):
             other = other.mask
         # Check if arrays are broadcastable
-        if not is_broadcastable(self.shape, other.shape):
+        if not is_broadcastable_and_smaller(self.shape, other.shape):
             raise ValueError("Mask shapes are not broadcastable.")
 
         self._mask = np.logical_and(self._mask, other)
@@ -282,7 +282,7 @@ class RadioMask(object):
         if isinstance(other, RadioMask):
             other = other.mask
         # Check if arrays are broadcastable
-        if not is_broadcastable(self.shape, other.shape):
+        if not is_broadcastable_and_smaller(self.shape, other.shape):
             raise ValueError("Mask shapes are not broadcastable.")
 
         self._mask = np.logical_xor(self._mask, other)
