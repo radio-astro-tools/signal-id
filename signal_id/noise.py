@@ -144,7 +144,7 @@ class Noise(object):
         self.spatial_footprint = np.any(self.cube.get_mask_array(),axis=0)
 
         if isinstance(beam, Beam):
-            pass
+            self.astropy_beam_flag = False
         elif isinstance(beam, Kernel2D):
             self.astropy_beam_flag = True
         else:
