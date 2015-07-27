@@ -97,7 +97,7 @@ class RadioMask(object):
 
     def from_spec_cube(self, cube, thresh=None):
         self._linked_data = cube
-        self._mask = cube._mask.include
+        self._mask = cube._mask.include()
         self._wcs = cube.wcs
 
     def from_array(self, array, thresh=None, wcs=None):
