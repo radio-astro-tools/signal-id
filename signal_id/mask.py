@@ -320,6 +320,13 @@ class RadioMask(object):
         self._mask = nd.binary_closing(self._mask, structure=struct,
                                        iterations=iterations)
 
+    def remove_small_regions(self):
+        '''
+        Remove 2D regions (per channel) based on their area. By default, this
+        removed regions smaller than the beam area.
+        '''
+        raise NotImplementedError("")
+
     # Reject on property
     def reject_region(self, func=None, thresh=None, struct=None):
         # self.log_and_backup(self.reject_region)
