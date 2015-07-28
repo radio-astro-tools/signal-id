@@ -328,9 +328,41 @@ class RadioMask(object):
         raise NotImplementedError("")
 
     # Reject on property
-    def reject_region(self, func=None, thresh=None, struct=None):
-        # self.log_and_backup(self.reject_region)
-        raise NotImplementedError()
+    def reject_region(self, func, iteraxis='spectral', func_args=()):
+        '''
+        Remove 2D regions from the mask based on the given criteria.
+        The specified function should operate on two-dimensional planes.
+        The axis to be iterated over can be specified using the iteraxis
+        argument. Additional inputs should be specified as a tuple in the args
+        argument.
+
+        Parameters
+        ----------
+        func : function
+            Contains rejection criteria operating on 2D planes.
+        iteraxis : int or 'spectral', optional
+            Axis to iterate over. This defaults to the spectral axis.
+        func_args : tuple, optional
+            Arguments passed to func.
+        '''
+        self.log_and_backup(self.reject_region)
+
+        if iteraxis == 'spectral':
+            iteraxis = self.cube.wcs.wcs.spec
+        elif isinstance(iteraxis, int):
+            pass
+        else:
+            raise TypeError("iteraxis must be an integer or 'spectral'.")
+
+        nplanes = self.mask.shape[iteraxis]
+        plane_slice = [slice(None) * self.cube.wcs.naxis]
+        # Now iterate through the planes
+        for plane in range(nplanes):
+            plane_slice[iteraxis] = slice(plane, plane+1)
+            self._mask[plane_slice] = \
+                func(self._mask[plane_slice], *func_args)
+
+        return self
 
     # Reject on volume (special case)
     def reject_on_volume(self, thresh=None, struct=None):
