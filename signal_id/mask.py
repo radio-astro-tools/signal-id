@@ -345,9 +345,9 @@ class RadioMask(object):
         # Attempt to get beam area from cube WCS info.
         if area_threshold is None:
             if beam is None:
-                beam = Beam.from_fits_header(self.cube.wcs.header)
+                beam = Beam.from_fits_header(self._linked_data.header)
 
-            pixscale = get_pixel_scales(self.cube.wcs)
+            pixscale = get_pixel_scales(self._linked_data.wcs)
             # Now get the pixel beam area
             pixel_area = beam.sr / pixscale**2.
 
@@ -395,14 +395,14 @@ class RadioMask(object):
             self.log_and_backup(self.reject_region)
 
         if iteraxis == 'spectral':
-            iteraxis = self.cube.wcs.wcs.spec
+            iteraxis = self._linked_data.wcs.wcs.spec
         elif isinstance(iteraxis, int):
             pass
         else:
             raise TypeError("iteraxis must be an integer or 'spectral'.")
 
         nplanes = self.mask.shape[iteraxis]
-        plane_slice = [slice(None) * self.cube.wcs.naxis]
+        plane_slice = [slice(None) * self._linked_data.wcs.naxis]
         # Now iterate through the planes
         for plane in range(nplanes):
             plane_slice[iteraxis] = slice(plane, plane+1)
