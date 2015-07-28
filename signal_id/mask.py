@@ -362,7 +362,8 @@ class RadioMask(object):
             return arr
 
         self.reject_region(area_thresh_func, iteraxis='spectral',
-                           func_args=(area_threshold))
+                           func_args=(area_threshold),
+                           log_call=False)
 
         return self
 
