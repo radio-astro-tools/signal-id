@@ -17,6 +17,7 @@ import scipy.ndimage as nd
 # radio tools
 from spectral_cube import SpectralCube, BooleanArrayMask
 from spectral_cube.masks import is_broadcastable_and_smaller
+from radio_beam import Beam
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # BASE CLASS
@@ -320,15 +321,51 @@ class RadioMask(object):
         self._mask = nd.binary_closing(self._mask, structure=struct,
                                        iterations=iterations)
 
-    def remove_small_regions(self):
+    def remove_small_regions(self, area_threshold=None, beam=None):
         '''
         Remove 2D regions (per channel) based on their area. By default, this
         removed regions smaller than the beam area.
+
+        Parameters
+        ----------
+        area_threshold : float, optional
+            Minimum pixel area to keep. Overrides beam argument.
+        beam : radio_beam.Beam, optional
+            Provide a Beam object to define the area threshold. By default,
+            a Beam object will be created from the information in the cube
+            WCS. Specifying a Beam object will override using the default
+            Beam object from the cube WCS.
+
         '''
-        raise NotImplementedError("")
+
+        self.log_and_backup(self.remove_small_regions)
+
+        # Attempt to get beam area from cube WCS info.
+        if area_threshold is None and beam is None:
+            pass
+        elif area_threshold is None and beam is not None:
+            pass
+
+        def area_thresh_func(arr, size_thresh):
+            label_arr, num = nd.label(arr, np.ones((3, 3)))
+
+            pixel_area = nd.sum(arr, label_arr, range(1, num+1))
+
+            remove_labels = np.where(pixel_area < size_thresh)[0]
+
+            for lab in remove_labels:
+                arr[np.where(label_arr == lab)] = 0
+
+            return arr
+
+        self.reject_region(area_thresh_func, iteraxis='spectral',
+                           func_args=(area_threshold))
+
+        return self
 
     # Reject on property
-    def reject_region(self, func, iteraxis='spectral', func_args=()):
+    def reject_region(self, func, iteraxis='spectral', func_args=(),
+                      log_call=True):
         '''
         Remove 2D regions from the mask based on the given criteria.
         The specified function should operate on two-dimensional planes.
@@ -344,8 +381,12 @@ class RadioMask(object):
             Axis to iterate over. This defaults to the spectral axis.
         func_args : tuple, optional
             Arguments passed to func.
+        log_call : bool, optional
+            Turns off the logging, since this function is called within
+            remove_small_regions.
         '''
-        self.log_and_backup(self.reject_region)
+        if log_call:
+            self.log_and_backup(self.reject_region)
 
         if iteraxis == 'spectral':
             iteraxis = self.cube.wcs.wcs.spec
