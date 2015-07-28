@@ -341,10 +341,13 @@ class RadioMask(object):
         self.log_and_backup(self.remove_small_regions)
 
         # Attempt to get beam area from cube WCS info.
-        if area_threshold is None and beam is None:
-            pass
-        elif area_threshold is None and beam is not None:
-            pass
+        if area_threshold is None:
+            if beam is None:
+                beam = Beam.from_fits_header(self.cube.wcs.to_header())
+
+            pixscale = get_pixel_scales(self.cube.wcs)
+            # Now get the pixel beam area
+            pixel_area = beam.sr / pixscale**2.
 
         def area_thresh_func(arr, size_thresh):
             label_arr, num = nd.label(arr, np.ones((3, 3)))

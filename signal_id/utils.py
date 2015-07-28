@@ -153,3 +153,4 @@ def get_celestial_axes(wcs):
             is_celestial.append(ax)
 
     return is_celestial
+
