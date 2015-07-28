@@ -343,7 +343,7 @@ class RadioMask(object):
         # Attempt to get beam area from cube WCS info.
         if area_threshold is None:
             if beam is None:
-                beam = Beam.from_fits_header(self.cube.wcs.to_header())
+                beam = Beam.from_fits_header(self.cube.wcs.header)
 
             pixscale = get_pixel_scales(self.cube.wcs)
             # Now get the pixel beam area
