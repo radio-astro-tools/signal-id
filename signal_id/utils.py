@@ -138,3 +138,18 @@ def get_pixel_scales(mywcs):
     #scale = np.array([cdelt[0] * (pc[0,0]**2 + pc[1,0]**2)**0.5,
     # cdelt[1] * (pc[0,1]**2 + pc[1,1]**2)**0.5])
     #return abs(scale[0])
+
+
+def get_celestial_axes(wcs):
+    '''
+    Return which axis or axes are celestial.
+    '''
+
+    is_celestial = []
+    axis_types = wcs.get_axis_types()
+
+    for ax in range(wcs.naxis):
+        if axis_types[ax]['coordinate_type'] == "celestial":
+            is_celestial.append(ax)
+
+    return is_celestial
