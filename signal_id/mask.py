@@ -19,6 +19,8 @@ from spectral_cube import SpectralCube, BooleanArrayMask
 from spectral_cube.masks import is_broadcastable_and_smaller
 from radio_beam import Beam
 
+from .utils import get_pixel_scales
+
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # BASE CLASS
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
