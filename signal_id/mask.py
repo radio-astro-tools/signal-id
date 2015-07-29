@@ -404,7 +404,7 @@ class RadioMask(object):
             raise TypeError("iteraxis must be an integer or 'spectral'.")
 
         nplanes = self.mask.shape[iteraxis]
-        plane_slice = [slice(None) * self._linked_data.wcs.naxis]
+        plane_slice = [slice(None)] * self._linked_data.wcs.naxis
         # Now iterate through the planes
         for plane in range(nplanes):
             plane_slice[iteraxis] = slice(plane, plane+1)
