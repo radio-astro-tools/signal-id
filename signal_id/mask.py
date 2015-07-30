@@ -13,6 +13,7 @@ import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage as nd
+from astropy import units as u
 
 # radio tools
 from spectral_cube import SpectralCube, BooleanArrayMask
@@ -350,9 +351,13 @@ class RadioMask(object):
             if beam is None:
                 beam = Beam.from_fits_header(self._linked_data.header)
 
-            pixscale = get_pixel_scales(self._linked_data.wcs)
+            # Get pixelscale, add unit on (ignore the per pixel)
+            # Eventually the unit should be included in get_pixel_scales
+            # but this requires additional workarounds when used for Beam
+            # objects
+            pixscale = get_pixel_scales(self._linked_data.wcs) * u.deg
             # Now get the pixel beam area
-            pixel_area = beam.sr / pixscale**2.
+            area_threshold = (beam.sr.to(u.deg**2) / pixscale**2.).value
 
         def area_thresh_func(arr, size_thresh):
             label_arr, num = nd.label(arr, np.ones((3, 3)))
