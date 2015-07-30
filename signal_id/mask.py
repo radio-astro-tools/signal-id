@@ -400,7 +400,8 @@ class RadioMask(object):
             self.log_and_backup(self.reject_region)
 
         if iteraxis == 'spectral':
-            iteraxis = self._linked_data.wcs.wcs.spec
+            iteraxis = self._linked_data.wcs.naxis - \
+                self._linked_data.wcs.wcs.spec - 1
         elif isinstance(iteraxis, int):
             pass
         else:
