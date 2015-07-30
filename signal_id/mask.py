@@ -325,7 +325,8 @@ class RadioMask(object):
         self._mask = nd.binary_closing(self._mask, structure=struct,
                                        iterations=iterations)
 
-    def remove_small_regions(self, area_threshold=None, beam=None):
+    def remove_small_regions(self, area_threshold=None, beam=None,
+                             verbose=False):
         '''
         Remove 2D regions (per channel) based on their area. By default, this
         removed regions smaller than the beam area.
@@ -367,13 +368,13 @@ class RadioMask(object):
 
         self.reject_region(area_thresh_func, iteraxis='spectral',
                            func_args=(area_threshold),
-                           log_call=False)
+                           log_call=False, verbose=verbose)
 
         return self
 
     # Reject on property
     def reject_region(self, func, iteraxis='spectral', func_args=(),
-                      log_call=True):
+                      log_call=True, verbose=False):
         '''
         Remove 2D regions from the mask based on the given criteria.
         The specified function should operate on two-dimensional planes.
@@ -392,6 +393,8 @@ class RadioMask(object):
         log_call : bool, optional
             Turns off the logging, since this function is called within
             remove_small_regions.
+        verbose : bool, optional
+            Enabling prints out the plane currently being altered.
         '''
         if log_call:
             self.log_and_backup(self.reject_region)
@@ -410,6 +413,8 @@ class RadioMask(object):
         plane_slice = [slice(None)] * self._linked_data.wcs.naxis
         # Now iterate through the planes
         for plane in range(nplanes):
+            if verbose:
+                print("On plane "+str(plane)+" of "+str(nplanes))
             plane_slice[iteraxis] = plane
             self._mask[plane_slice] = \
                 func(self._mask[plane_slice], *func_args)
