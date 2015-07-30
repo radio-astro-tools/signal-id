@@ -410,7 +410,7 @@ class RadioMask(object):
         plane_slice = [slice(None)] * self._linked_data.wcs.naxis
         # Now iterate through the planes
         for plane in range(nplanes):
-            plane_slice[iteraxis] = slice(plane, plane+1)
+            plane_slice[iteraxis] = plane
             self._mask[plane_slice] = \
                 func(self._mask[plane_slice], *func_args)
 
