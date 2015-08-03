@@ -398,7 +398,7 @@ class RadioMask(object):
             # Eventually the unit should be included in get_pixel_scales
             # but this requires additional workarounds when used for Beam
             # objects
-            pixscale = get_pixel_scales(self._linked_data.wcs) * u.deg
+            pixscale = get_pixel_scales(self._wcs) * u.deg
             # Now get the pixel beam area
             area_threshold = (beam.sr.to(u.deg**2) / pixscale**2.).value
 
@@ -448,8 +448,8 @@ class RadioMask(object):
             self.log_and_backup(self.reject_region)
 
         if iteraxis == 'spectral':
-            iteraxis = self._linked_data.wcs.naxis - \
-                self._linked_data.wcs.wcs.spec - 1
+            iteraxis = self._wcs.naxis - \
+                self._wcs.wcs.spec - 1
         elif isinstance(iteraxis, int):
             pass
         else:
@@ -459,7 +459,7 @@ class RadioMask(object):
             func_args = (func_args, )
 
         nplanes = self.mask.shape[iteraxis]
-        plane_slice = [slice(None)] * self._linked_data.wcs.naxis
+        plane_slice = [slice(None)] * self._wcs.naxis
         # Now iterate through the planes
         for plane in range(nplanes):
             if verbose:
