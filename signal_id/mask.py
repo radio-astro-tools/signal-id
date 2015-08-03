@@ -29,7 +29,61 @@ from .utils import get_pixel_scales
 
 class RadioMask(object):
     """
-    Holds a binary array with associated metadata.
+    Create and manipulate a binary mask for a spectral datacube. `RadioMask`
+    understands and contains the associated metadata, leveraging the abilities
+    of the `SpectralCube <http://spectral-cube.readthedocs.org/en/latest/>`_
+    package. `RadioMask` is intended for interactively manipulating masks and
+    includes abilities to log and backup previous versions of the mask, as well
+    as applying the changed mask to a `SpectralCube` object or writing the mask
+    to disk. Most common morphological operations are availabled.
+
+
+    Parameters
+    ----------
+    data : {SpectralCube, str, np.ndarray}
+        Datacube to create the mask from.
+    thresh : float, optional
+        Threshold level used to create the mask.
+    backup : bool, optional
+        Enables a backup after performing an operation on the mask. Changes
+        can then be reverted to the previous step.
+    args : tuple or keyword arguments, optional
+        Passed to loading functions. If `data` given as an array, a `WCS`
+        object can be supplied by specifying `wcs`. If loading from a file,
+        the file format can be supplied through `format`. `signal-id` supports
+        the same formats as
+        `spectral-cube <http://spectral-cube.readthedocs.org/en/latest/>`_.
+
+    Example
+    -------
+
+    Starting from a `SpectralCube` object:
+    >>> from spectral_cube import SpectralCube
+    >>> from signal_id import RadioMask
+    >>> cube = SpectralCube.read("test.fits")
+    >>> mask = RadioMask(cube)
+    By default, a backup of the mask is created whenever an operation is
+    applied. That way, the previous version can be recovered.
+
+    Operations can then be applied to the mask. For example, to perform a
+    binary dilation then erosion,
+    >>> mask.binary_dilation()
+    >>> mask.binary_erosion()
+
+    If the outcome of the erosion was unintended, the backup can be restored
+    using:
+    >>> mask.undo()
+
+    The mask can be attached to a `SpectralCube` object using:
+    >>> cube2 = mask.attach_to_cube()
+    By default, this will use the `SpectralCube` object from
+    `mask.linked_data`.
+
+    The mask can be written using:
+    >>> mask.write("test_mask.fits")
+
+
+
     """
 
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -57,15 +111,6 @@ class RadioMask(object):
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
     def __init__(self, data, thresh=None, backup=True, *args):
-        '''
-
-        Parameters
-        ----------
-        data : {SpectralCube, str, np.ndarray}
-            Datacube to create the mask from.
-        thresh : float, optional
-            Threshold level used to create the mask.
-        '''
 
         if isinstance(data, SpectralCube):
                 self.from_spec_cube(data, thresh=thresh, *args)
