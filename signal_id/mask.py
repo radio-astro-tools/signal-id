@@ -237,11 +237,9 @@ class RadioMask(object):
 
     def enable_backup(self):
         self.is_backup_enabled = True
-        return self
 
     def disable_backup(self):
         self.is_backup_enabled = False
-        return self
 
     def log_and_backup(self, func):
         '''
