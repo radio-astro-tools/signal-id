@@ -186,7 +186,13 @@ class RadioMask(object):
 
     def as_spec_cube(self, dtype=bool):
         """
-        Return a spectral cube. Use scale to change type.
+        Return a spectral cube.
+
+        Parameters
+        ----------
+        dtype : valid data type, optional
+            Specify the data type to be used in the mask in the
+            SpectralCube object. Defaults to boolean.
         """
         if isinstance(self._linked_data, SpectralCube):
             return SpectralCube(self._mask.astype(dtype),
@@ -205,6 +211,14 @@ class RadioMask(object):
     def write(self, fname, dtype=int):
         """
         Write to a file. Default to using ints.
+
+        Parameters
+        ----------
+        fname : str
+            Name of the file to output to.
+        dtype : valid data type, optional
+            The data type the mask is converted to when writing out. Due to
+            FITS not supporting boolean arrays, the default is 'int'.
         """
         # So wasteful...
         cube = self.as_spec_cube(dtype=dtype)
