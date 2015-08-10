@@ -115,7 +115,7 @@ class RadioMask(object):
         if isinstance(data, SpectralCube):
                 self.from_spec_cube(data, thresh=thresh, *args)
 
-        elif isinstance(data, str):
+        elif isinstance(data, str) or isinstance(data, unicode):
             self.from_file(data, *args)
 
         elif isinstance(data, np.ndarray):
