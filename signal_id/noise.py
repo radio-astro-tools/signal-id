@@ -114,14 +114,8 @@ class Noise(object):
     # Initialization
     # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
-    def __init__(
-        self,
-        cube,
-        scale=None,
-        spatial_norm = None,
-        spectral_norm = None,
-        beam = None,
-        method="MAD"):
+    def __init__(self, cube, scale=None, spatial_norm=None,
+                 spectral_norm=None, beam=None, method="MAD"):
         """
         Construct a new Noise object.
 
