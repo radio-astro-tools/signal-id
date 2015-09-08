@@ -135,16 +135,27 @@ class Noise(object):
         else:
             warnings.warn("Noise currently requires a SpectralCube instance.")
 
-        self.spatial_footprint = np.any(self.cube.get_mask_array(),axis=0)
+        self.spatial_footprint = np.any(self.cube.get_mask_array(), axis=0)
 
-        if isinstance(beam, Beam):
-            self.astropy_beam_flag = False
-        elif isinstance(beam, Kernel2D):
-            self.astropy_beam_flag = True
+        if beam is None:
+            try:
+                self.beam = cube.beam
+                self.astropy_beam_flag = False
+            except AttributeError:
+                warnings.warn("cube object has no associated beam. All beam "
+                              "operations are disabled.")
+                self.beam = None
+                self.astropy_beam_flag = True
         else:
-            warnings.warn("beam must be a radio_beam Beam object or an astropy\
-                           Kernel2D object. All beam operations are disabled.")
-        self.beam = beam
+            if isinstance(beam, Beam):
+                self.astropy_beam_flag = False
+            elif isinstance(beam, Kernel2D):
+                self.astropy_beam_flag = True
+            else:
+                warnings.warn("beam must be a radio_beam Beam object or an "
+                              "astropy Kernel2D object. All beam operations "
+                              "are disabled.")
+            self.beam = beam
 
         # Default to a normal distribution
         self.distribution = ss.norm
