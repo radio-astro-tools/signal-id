@@ -21,7 +21,7 @@ from spectral_cube import SpectralCube, BooleanArrayMask
 from spectral_cube.masks import is_broadcastable_and_smaller
 from radio_beam import Beam
 
-from .utils import get_pixel_scales
+from .utils import get_pixel_scales, remove_small_objects
 
 # &%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%&%
 # BASE CLASS
@@ -418,14 +418,9 @@ class RadioMask(object):
             area_threshold = (beam.sr.to(u.deg**2) / pixscale**2.).value
 
         def area_thresh_func(arr, size_thresh):
-            label_arr, num = nd.label(arr, np.ones((3, 3)))
 
-            pixel_area = nd.sum(arr, label_arr, range(1, num+1))
-
-            remove_labels = np.where(pixel_area < size_thresh)[0]
-
-            for lab in remove_labels:
-                arr[np.where(label_arr == lab)] = 0
+            remove_small_objects(arr, min_size=size_thresh,
+                                 connectivity=arr.ndim, in_place=True)
 
             return arr
 
