@@ -413,9 +413,10 @@ class RadioMask(object):
             # Eventually the unit should be included in get_pixel_scales
             # but this requires additional workarounds when used for Beam
             # objects
-            pixscale = get_pixel_scales(self._wcs) * u.deg
+            pixscale = get_pixel_scales(self._wcs)
+
             # Now get the pixel beam area
-            area_threshold = (beam.sr.to(u.deg**2) / pixscale**2.).value
+            area_threshold = (beam.as_tophat_kernel(pixscale).array > 0).sum()
 
         def area_thresh_func(arr, size_thresh):
 
