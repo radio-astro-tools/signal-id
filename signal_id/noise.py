@@ -140,12 +140,11 @@ class Noise(object):
         if beam is None:
             try:
                 self.beam = cube.beam
-                self.astropy_beam_flag = False
             except AttributeError:
                 warnings.warn("cube object has no associated beam. All beam "
                               "operations are disabled.")
                 self.beam = None
-                self.astropy_beam_flag = True
+            self.astropy_beam_flag = False
         else:
             if isinstance(beam, Beam):
                 self.astropy_beam_flag = False
