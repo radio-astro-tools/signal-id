@@ -10,8 +10,10 @@ try:
 except ImportError:
     from scipy.stats import nanmedian, nanstd
 
+import warnings
 import numpy as np
 import scipy.stats as ss
+import scipy.ndimage as nd
 
 import astropy.convolution as conv
 
@@ -234,9 +236,9 @@ def remove_small_objects(ar, min_size=64, connectivity=1, in_place=False):
         return out
 
     if out.dtype == bool:
-        selem = ndi.generate_binary_structure(ar.ndim, connectivity)
+        selem = nd.generate_binary_structure(ar.ndim, connectivity)
         ccs = np.zeros_like(ar, dtype=np.int32)
-        ndi.label(ar, selem, output=ccs)
+        nd.label(ar, selem, output=ccs)
     else:
         ccs = out
 
