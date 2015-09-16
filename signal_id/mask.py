@@ -416,7 +416,8 @@ class RadioMask(object):
             pixscale = get_pixel_scales(self._wcs)
 
             # Now get the pixel beam area
-            area_threshold = (beam.as_tophat_kernel(pixscale).array > 0).sum()
+            area_threshold = \
+                np.count_nonzero(beam.as_tophat_kernel(pixscale).array > 0)
 
         def area_thresh_func(arr, size_thresh):
 
