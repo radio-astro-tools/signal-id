@@ -307,7 +307,7 @@ class Noise(object):
             estimate = mad(snr, axis=0)
 
         if method == "STD":
-            estimate = nanstd(snr,axis=0)
+            estimate = nanstd(snr, axis=0)
 
         # If we are doing a cumulative calculation then append the estimate
         if cumul:

@@ -8,7 +8,7 @@ Utility functions used in signal_id
 try:
     from bottleneck import nanmedian, nanstd
 except ImportError:
-    from scipy.stats import nanmedian, nanstd
+    from numpy import nanmedian, nanstd
 
 import warnings
 import numpy as np
@@ -78,7 +78,7 @@ def mad(data, sigma=True, axis=None,
     if not sigma:
         return mad
     else:
-        return mad*1.4826
+        return mad * 1.4826
 
 
 def std(data, axis=None):
